@@ -95,19 +95,21 @@ def extract_splices(bam_input, sqlite_output):
 
         new_splices = Splice.from_aln(aln)
         if len(new_splices) > 0:
+            count_splices += len(new_splices)
             # New chromosome? Store it!
             splice_chrom = new_splices[0].chrom
             if cur_chrom != splice_chrom:
-                logging.debug("From %s to %s: Writing to %s" % (
-                    cur_chrom, splice_chrom, sqlite_output))
-                store_splices(cur_splices, sqlite_output)
+                if cur_chrom != '':
+                    logging.info("From %s to %s: Writing to %s" % (
+                        cur_chrom, splice_chrom, sqlite_output))
+                    store_splices(cur_splices, sqlite_output)
                 cur_splices = []
                 cur_chrom = splice_chrom
 
             cur_splices = cur_splices + new_splices
 
-        if count_splices >= 10:
-            break
+    logging.info("Final store: Writing %s to %s" % (
+        cur_chrom, sqlite_output))
     store_splices(cur_splices, sqlite_output)
 
     logging.info("Total read alignments: " + str(count))
