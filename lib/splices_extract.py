@@ -8,7 +8,7 @@ import HTSeq
 
 
 class Splice():
-    """Splice junction found in by a read"""
+    """Splice junction found in a read"""
 
     def __init__(self, chrom, start, end, strand, left_flank=1, right_flank=1):
         self.chrom = chrom
@@ -28,11 +28,11 @@ class Splice():
             self.right_flank
         )
 
-    def from_read(read):
-        """Create a list of splices from a read"""
-        chrom = read.iv.chrom
-        strand = read.iv.strand
-        read_start = read.iv.start
+    def from_aln(aln):
+        """Create a list of splices from a read alignment"""
+        chrom = aln.iv.chrom
+        strand = aln.iv.strand
+        read_start = aln.iv.start
 
         # Collect gaps spanned by the read
         # We keep a record of the matched sequence in seq,
@@ -42,7 +42,7 @@ class Splice():
         gaps = []
 
         cur_seq = 0
-        for c in read.cigar:
+        for c in aln.cigar:
             if c.type == "N":
                 gaps.append(c.size)
                 seqs.append(0)
@@ -77,10 +77,10 @@ def extract_splices(bam_input, sqlite_output):
 
     cur_splices = []
     cur_chrom = ''
-    for read in bam_reader:
+    for aln in bam_reader:
         count += 1
 
-        new_splices = Splice.from_read(read)
+        new_splices = Splice.from_aln(aln)
         if len(new_splices) > 0:
             # New chromosome? Store it!
             splice_chrom = new_splices[0].chrom
@@ -99,7 +99,7 @@ def extract_splices(bam_input, sqlite_output):
             break
     store_splices(cur_splices, sqlite_output)
 
-    logging.info("Total reads: " + str(count))
+    logging.info("Total read alignments: " + str(count))
     logging.info("Total splices: " + str(count_splices))
 
 
