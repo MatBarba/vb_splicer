@@ -3,26 +3,52 @@
 import argparse
 import logging
 
+import sqlite3
 from Splice import SpliceCollection, SpliceDB
 
 
 def merge_dbs(output_db, input_dbs):
     """Merge a list of SpliceDBs into one"""
 
-    col = SpliceCollection()
     db = SpliceDB(output_db)
     db.init()
     logging.info("Created output db %s" % output_db)
 
-    for input_db in input_dbs:
-        logging.info("Merge db %s" % input_db)
-        input_col = SpliceDB(input_db)
-        in_col = input_col.get_collection()
+    # First, get the list of chroms from all dbs
+    chroms = get_chroms(input_dbs)
+    logging.info("Total chroms: %d" % len(chroms))
 
-        # Merge all splices
-        col.add_splices(in_col.get_splices())
+    size = 0
+    for chrom in sorted(chroms):
+        col = SpliceCollection()
+        for input_db in input_dbs:
+            logging.debug("Merge db %s" % input_db)
+            input_col = SpliceDB(input_db)
+            in_col = input_col.get_collection(chrom=chrom)
 
-    db.add_collection(col)
+            # Merge all splices
+            col.add_splices(in_col.get_splices())
+        db.add_collection(col)
+        size += col.size
+        logging.info(
+            "Completed merging of %s (%d total merged splices)" % (chrom, size))
+
+
+def get_chroms(dbs):
+
+    chroms = {}
+    for db in dbs:
+        sql = "SELECT DISTINCT(chrom) FROM splices"
+        conn = sqlite3.connect(db)
+        c = conn.cursor()
+        c.execute(sql)
+
+        for row in c.fetchall():
+            chrom = row[0]
+            if chrom not in chroms:
+                chroms[chrom] = 1
+
+    return list(chroms.keys())
 
 
 if __name__ == "__main__":
