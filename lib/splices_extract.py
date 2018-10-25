@@ -42,6 +42,11 @@ class Splice():
 
     def from_aln(aln):
         """Create a list of splices from a read alignment"""
+
+        # In some cases the read is not aligned, so skip it
+        if aln.iv == None:
+            return []
+
         chrom = aln.iv.chrom
         strand = aln.iv.strand
         read_start = aln.iv.start
@@ -123,6 +128,10 @@ class Splice():
         if self.right_flank < new_splice.right_flank:
             self.right_flank = new_splice.right_flank
 
+    def to_gff(self):
+        """Return a formatted string to be written in a gff file"""
+        return ""
+
 
 class SpliceCollection():
     """Collection of splices"""
@@ -146,6 +155,85 @@ class SpliceCollection():
         return list(self.splices.values())
 
 
+class SpliceDB():
+    """Interface to an SQLite db where splices can be stored"""
+
+    def __init__(self, path):
+        self.path = path
+        self.conn = None
+
+    def drop_db(self):
+        os.remove(self.path)
+
+    def get_connection(self):
+        if self.conn == None:
+            self.conn = sqlite3.connect(self.path)
+        return self.conn
+
+    def init(self):
+        if os.path.isfile(self.path):
+            self.drop_db()
+
+        conn = self.get_connection()
+        c = conn.cursor()
+
+        c.execute('''CREATE TABLE splices (
+                    chrom text,
+                    start int,
+                    end int,
+                    strand text,
+                    left_flank int,
+                    right_flank int,
+                    coverage int
+                )''')
+
+    def add_collection(self, collection):
+        """Store all the Splices from a SpliceCollection in the SpliceDB"""
+
+        conn = self.get_connection()
+        c = conn.cursor()
+        for splice in collection.get_splices():
+            values = splice.sql_values()
+            fields = ",".join(splice.sql_fields)
+            placeholder = splice.sql_placeholder()
+            sql = "INSERT INTO splices("+fields+") VALUES("+placeholder+")"
+            logging.debug(sql)
+            logging.debug(values)
+            c.execute(sql, values)
+        conn.commit()
+
+    def get_collection(self, chrom=''):
+        """Retrieve a SpliceCollection from the SpliceDB"""
+        conn = sqlite3.connect(path)
+        c = conn.cursor()
+
+        sql = "SELECT " + ",".join(Splice.fields) + " FROM splices"
+        data = []
+        if chrom != '':
+            sql += " WHERE chrom=?";
+            data.append(chrom)
+        c.execute(sql, data)
+
+        col = SpliceCollection()
+        for row in c.fetchall():
+            s = {}
+            for i, val in enumerate(row):
+                field = Splice.fields[i]
+                s[field] = val
+            splice = Splice(
+                s[chrom],
+                s[start],
+                s[end],
+                s[strand],
+                s[left_flank],
+                s[right_flank],
+                s[coverage]
+            )
+            col.add_splice(splice)
+
+        return col
+
+
 def extract_splices(bam_input, sqlite_output):
     """Extract splices from a bam file, and write them in an SQLite db file"""
     logging.info("Read bam file " + bam_input)
@@ -154,6 +242,8 @@ def extract_splices(bam_input, sqlite_output):
     bam_reader = HTSeq.BAM_Reader(bam_input)
 
     collection = SpliceCollection()
+    db = SpliceDB(sqlite_output)
+    db.init()
 
     count = 0
     count_splices = 0
@@ -169,58 +259,20 @@ def extract_splices(bam_input, sqlite_output):
             splice_chrom = new_splices[0].chrom
             if cur_chrom != splice_chrom:
                 if cur_chrom != '':
-                    logging.info("From %s to %s: Writing to %s" % (
-                        cur_chrom, splice_chrom, sqlite_output))
-                    store_splices(collection, sqlite_output)
+                    logging.info("%s done: Writing %d splices to %s" % (
+                        cur_chrom, collection.size, sqlite_output))
+                    db.add_collection(collection)
                 collection = SpliceCollection()
                 cur_chrom = splice_chrom
 
             collection.add_splices(new_splices)
 
-    logging.info("Final store: Writing %s to %s" % (
-        cur_chrom, sqlite_output))
-    store_splices(collection, sqlite_output)
+    logging.info("%s done: Writing %d splices to %s" % (
+        cur_chrom, collection.size, sqlite_output))
+    db.add_collection(collection)
 
     logging.info("Total read alignments: " + str(count))
     logging.info("Total splices: " + str(count_splices))
-
-
-def store_splices(collection, output):
-
-    # Init sqlite db if new
-    init_sqlite_db(output)
-
-    conn = sqlite3.connect(output)
-    c = conn.cursor()
-
-    for splice in collection.get_splices():
-        values = splice.sql_values()
-        fields = ",".join(splice.sql_fields)
-        placeholder = splice.sql_placeholder()
-        sql = "INSERT INTO splices("+fields+") VALUES("+placeholder+")"
-        logging.debug(sql)
-        logging.debug(values)
-        c.execute(sql, values)
-    conn.commit()
-    conn.close()
-
-
-def init_sqlite_db(output):
-    if os.path.isfile(output):
-        os.remove(output)
-
-    conn = sqlite3.connect(output)
-    c = conn.cursor()
-
-    c.execute('''CREATE TABLE splices (
-                chrom text,
-                start int,
-                end int,
-                strand text,
-                left_flank int,
-                right_flank int,
-                coverage int
-              )''')
 
 
 if __name__ == "__main__":
