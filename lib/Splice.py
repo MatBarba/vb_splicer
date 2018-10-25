@@ -1,6 +1,5 @@
 #!env python3
 
-import argparse
 import logging
 import os.path
 
@@ -44,7 +43,7 @@ class Splice():
         """Create a list of splices from a read alignment"""
 
         # In some cases the read is not aligned, so skip it
-        if aln.iv == None:
+        if aln.iv is None:
             return []
 
         chrom = aln.iv.chrom
@@ -166,7 +165,7 @@ class SpliceDB():
         os.remove(self.path)
 
     def get_connection(self):
-        if self.conn == None:
+        if self.conn is None:
             self.conn = sqlite3.connect(self.path)
         return self.conn
 
@@ -204,13 +203,13 @@ class SpliceDB():
 
     def get_collection(self, chrom=''):
         """Retrieve a SpliceCollection from the SpliceDB"""
-        conn = sqlite3.connect(path)
+        conn = self.get_connection()
         c = conn.cursor()
 
         sql = "SELECT " + ",".join(Splice.fields) + " FROM splices"
         data = []
         if chrom != '':
-            sql += " WHERE chrom=?";
+            sql += " WHERE chrom=?"
             data.append(chrom)
         c.execute(sql, data)
 
@@ -221,13 +220,13 @@ class SpliceDB():
                 field = Splice.fields[i]
                 s[field] = val
             splice = Splice(
-                s[chrom],
-                s[start],
-                s[end],
-                s[strand],
-                s[left_flank],
-                s[right_flank],
-                s[coverage]
+                s['chrom'],
+                s['tart'],
+                s['end'],
+                s['trand'],
+                s['left_flank'],
+                s['right_flank'],
+                s['coverage']
             )
             col.add_splice(splice)
 
@@ -273,25 +272,3 @@ def extract_splices(bam_input, sqlite_output):
 
     logging.info("Total read alignments: " + str(count))
     logging.info("Total splices: " + str(count_splices))
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("input", help="Path to input bam file")
-    parser.add_argument("output", help="Path to output a gff file")
-    parser.add_argument(
-            '-d', '--debug',
-            help="Print lots of logging.debugging statements",
-            action="store_const", dest="loglevel", const=logging.DEBUG,
-            default=logging.WARNING,
-            )
-    parser.add_argument(
-            '-v', '--verbose',
-            help="Be verbose",
-            action="store_const", dest="loglevel", const=logging.INFO,
-            )
-    args = parser.parse_args()
-
-    logging.basicConfig(level=args.loglevel)
-
-    extract_splices(args.input, args.output)

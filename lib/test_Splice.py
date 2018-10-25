@@ -1,6 +1,6 @@
 import unittest
 from HTSeq import SAM_Alignment
-from splices_extract import Splice, SpliceCollection
+from Splice import Splice, SpliceCollection
 
 
 class TestSplice(unittest.TestCase):
