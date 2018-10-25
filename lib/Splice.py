@@ -206,7 +206,7 @@ class SpliceDB():
         conn = self.get_connection()
         c = conn.cursor()
 
-        sql = "SELECT " + ",".join(Splice.fields) + " FROM splices"
+        sql = "SELECT " + ",".join(Splice.sql_fields) + " FROM splices"
         data = []
         if chrom != '':
             sql += " WHERE chrom=?"
@@ -217,13 +217,13 @@ class SpliceDB():
         for row in c.fetchall():
             s = {}
             for i, val in enumerate(row):
-                field = Splice.fields[i]
+                field = Splice.sql_fields[i]
                 s[field] = val
             splice = Splice(
                 s['chrom'],
-                s['tart'],
+                s['start'],
                 s['end'],
-                s['trand'],
+                s['strand'],
                 s['left_flank'],
                 s['right_flank'],
                 s['coverage']
