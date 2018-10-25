@@ -6,6 +6,12 @@ import os.path
 # To parse a BAM file
 import sqlite3
 
+# To create a GFF
+# from BCBio import GFF
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import SeqFeature, FeatureLocation
+
 
 class Splice():
     """Splice junction found in a read"""
@@ -22,7 +28,7 @@ class Splice():
         self.left_flank = left_flank
         self.right_flank = right_flank
         self.coverage = coverage
-        self.key = "|".join([self.chrom,
+        self.key = "-".join([self.chrom,
                              str(self.start),
                              str(self.end),
                              self.strand
@@ -126,9 +132,60 @@ class Splice():
         if self.right_flank < new_splice.right_flank:
             self.right_flank = new_splice.right_flank
 
-    def to_gff(self):
+    def get_gff_record(self):
         """Return a formatted string to be written in a gff file"""
-        return ""
+
+        gene_start = self.start - self.left_flank
+        gene_end = self.end + self.right_flank
+        strand = self.strand
+        if (strand == '+'):
+            strand = +1
+        elif (strand == '-'):
+            strand = -1
+        else:
+            strand = 0
+
+        location = FeatureLocation(gene_start, gene_end)
+        gene_qualif = {
+            "source": "rnaseq",
+            "score": self.coverage,
+            "Name": "x%d" % self.coverage,
+            "ID": self.key
+        }
+        top_feat = SeqFeature(
+            location,
+            type="gene",
+            strand=strand,
+            qualifiers=gene_qualif
+        )
+
+        # Append the features
+        sub_features = []
+        sub_features.append(SeqFeature(
+            FeatureLocation(gene_start, self.start - 1),
+            'exon',
+            strand=strand,
+            qualifiers={"source": "rnaseq"}
+        ))
+        sub_features.append(SeqFeature(
+            FeatureLocation(self.start, self.end),
+            'intron',
+            strand=strand,
+            qualifiers={"source": "rnaseq"}
+        ))
+        sub_features.append(SeqFeature(
+            FeatureLocation(self.end + 1, gene_end),
+            'exon',
+            strand=strand,
+            qualifiers={"source": "rnaseq"}
+        ))
+        top_feat.sub_features = sub_features
+
+        # Create the actual record
+        rec = SeqRecord(Seq(""), self.chrom)
+        rec.features = [top_feat]
+
+        return rec
 
 
 class SpliceCollection():

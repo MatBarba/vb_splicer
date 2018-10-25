@@ -23,8 +23,8 @@ def merge_dbs(output_db, input_dbs):
         col = SpliceCollection()
         for input_db in input_dbs:
             logging.debug("Merge db %s" % input_db)
-            input_col = SpliceDB(input_db)
-            in_col = input_col.get_collection(chrom=chrom)
+            input_db = SpliceDB(input_db)
+            in_col = input_db.get_collection(chrom=chrom)
 
             # Merge all splices
             col.add_splices(in_col.get_splices())
