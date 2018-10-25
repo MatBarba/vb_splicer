@@ -24,6 +24,11 @@ class Splice():
         self.left_flank = left_flank
         self.right_flank = right_flank
         self.coverage = coverage
+        self.key = "|".join([self.chrom,
+                             str(self.start),
+                             str(self.end),
+                             self.strand
+                             ])
 
     def __str__(self):
         return "%s:%d-%d (%s) [%d-%d]\n" % (
@@ -77,6 +82,69 @@ class Splice():
     def sql_placeholder(self):
         return ",".join(['?' for f in self.sql_fields])
 
+    def same_splice(self, other_splice):
+        """Compare two splices: return True if they are at the same position"""
+
+        if (self.chrom == other_splice.chrom and
+                self.strand == other_splice.strand and
+                self.start == other_splice.start and
+                self.end == other_splice.end):
+            return True
+        else:
+            return False
+
+    def expand(self, new_splice):
+        """Merge the splices if they are at the same position
+
+        If they are not, return False
+        """
+
+        if self.same_splice(new_splice):
+            self.merge(new_splice)
+            return True
+        else:
+            return False
+
+    def merge(self, new_splice):
+        """Merge the coverage and flanks of two splices
+
+        This should not be used directly, use expand instead to only merge is
+        the splices are actually the same
+        """
+
+        # Merge coverages
+        self.coverage += new_splice.coverage
+
+        # Merge left flank
+        if self.left_flank < new_splice.left_flank:
+            self.left_flank = new_splice.left_flank
+
+        # Merge right flank
+        if self.right_flank < new_splice.right_flank:
+            self.right_flank = new_splice.right_flank
+
+
+class SpliceCollection():
+    """Collection of splices"""
+
+    def __init__(self):
+        self.splices = {}
+        self.size = 0
+
+    def add_splices(self, splices):
+        for splice in splices:
+            self.add_splice(splice)
+
+    def add_splice(self, splice):
+        if splice.key in self.splices:
+            self.splices[splice.key].expand(splice)
+        else:
+            self.splices[splice.key] = splice
+            self.size += 1
+
+    def get_splices(self):
+        return list(self.splices.values())
+
 
 def extract_splices(bam_input, sqlite_output):
     """Extract splices from a bam file, and write them in an SQLite db file"""
@@ -85,10 +153,11 @@ def extract_splices(bam_input, sqlite_output):
     # Read bam file
     bam_reader = HTSeq.BAM_Reader(bam_input)
 
+    collection = SpliceCollection()
+
     count = 0
     count_splices = 0
 
-    cur_splices = []
     cur_chrom = ''
     for aln in bam_reader:
         count += 1
@@ -102,21 +171,21 @@ def extract_splices(bam_input, sqlite_output):
                 if cur_chrom != '':
                     logging.info("From %s to %s: Writing to %s" % (
                         cur_chrom, splice_chrom, sqlite_output))
-                    store_splices(cur_splices, sqlite_output)
-                cur_splices = []
+                    store_splices(collection, sqlite_output)
+                collection = SpliceCollection()
                 cur_chrom = splice_chrom
 
-            cur_splices = cur_splices + new_splices
+            collection.add_splices(new_splices)
 
     logging.info("Final store: Writing %s to %s" % (
         cur_chrom, sqlite_output))
-    store_splices(cur_splices, sqlite_output)
+    store_splices(collection, sqlite_output)
 
     logging.info("Total read alignments: " + str(count))
     logging.info("Total splices: " + str(count_splices))
 
 
-def store_splices(splices, output):
+def store_splices(collection, output):
 
     # Init sqlite db if new
     init_sqlite_db(output)
@@ -124,7 +193,7 @@ def store_splices(splices, output):
     conn = sqlite3.connect(output)
     c = conn.cursor()
 
-    for splice in splices:
+    for splice in collection.get_splices():
         values = splice.sql_values()
         fields = ",".join(splice.sql_fields)
         placeholder = splice.sql_placeholder()
