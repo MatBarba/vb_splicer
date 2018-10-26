@@ -44,7 +44,7 @@ class Splice():
             self.right_flank
         )
 
-    def from_aln(aln):
+    def from_aln(aln, stranded=False):
         """Create a list of splices from a read alignment"""
 
         # In some cases the read is not aligned, so skip it
@@ -52,7 +52,10 @@ class Splice():
             return []
 
         chrom = aln.iv.chrom
-        strand = aln.iv.strand
+        if stranded:
+            strand = aln.iv.strand
+        else:
+            strand = '.'
         read_start = aln.iv.start
 
         # Collect gaps spanned by the read
@@ -167,12 +170,12 @@ class Splice():
             strand=strand,
             qualifiers={"source": "rnaseq"}
         ))
-        sub_features.append(SeqFeature(
-            FeatureLocation(self.start, self.end),
-            'intron',
-            strand=strand,
-            qualifiers={"source": "rnaseq"}
-        ))
+#        sub_features.append(SeqFeature(
+#            FeatureLocation(self.start, self.end),
+#            'intron',
+#            strand=strand,
+#            qualifiers={"source": "rnaseq"}
+#        ))
         sub_features.append(SeqFeature(
             FeatureLocation(self.end, gene_end),
             'exon',
