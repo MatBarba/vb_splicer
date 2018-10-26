@@ -29,7 +29,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("output", help="Path to output the created gff file")
     parser.add_argument('input', help='Splice db to use')
-    parser.add_argument('--coverage', dest='coverage', help='Minimum coverage')
+    parser.add_argument(
+        '--coverage', dest='coverage', default=1, help='Minimum coverage')
     parser.add_argument(
             '-d', '--debug',
             help="Print lots of logging.debugging statements",
