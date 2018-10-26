@@ -7,9 +7,9 @@ from Splice import SpliceDB
 from BCBio import GFF
 
 
-def create_gff(input, output):
+def create_gff(input, output, coverage):
     input_db = SpliceDB(input)
-    col = input_db.get_collection()
+    col = input_db.get_collection(coverage=coverage)
 
     if col.size == 0:
         logging.warn("Collection is empty, abort")
@@ -29,6 +29,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("output", help="Path to output the created gff file")
     parser.add_argument('input', help='Splice db to use')
+    parser.add_argument('--coverage', dest='coverage', help='Minimum coverage')
     parser.add_argument(
             '-d', '--debug',
             help="Print lots of logging.debugging statements",
@@ -44,4 +45,4 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=args.loglevel)
 
-    create_gff(args.input, args.output)
+    create_gff(args.input, args.output, int(args.coverage))

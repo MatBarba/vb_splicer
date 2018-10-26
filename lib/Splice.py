@@ -145,7 +145,7 @@ class Splice():
         else:
             strand = 0
 
-        location = FeatureLocation(gene_start, gene_end)
+        location = FeatureLocation(gene_start - 1, gene_end)
         gene_qualif = {
             "source": "rnaseq",
             "score": self.coverage,
@@ -162,7 +162,7 @@ class Splice():
         # Append the features
         sub_features = []
         sub_features.append(SeqFeature(
-            FeatureLocation(gene_start, self.start - 1),
+            FeatureLocation(gene_start - 1, self.start),
             'exon',
             strand=strand,
             qualifiers={"source": "rnaseq"}
@@ -174,7 +174,7 @@ class Splice():
             qualifiers={"source": "rnaseq"}
         ))
         sub_features.append(SeqFeature(
-            FeatureLocation(self.end + 1, gene_end),
+            FeatureLocation(self.end, gene_end),
             'exon',
             strand=strand,
             qualifiers={"source": "rnaseq"}
@@ -257,16 +257,25 @@ class SpliceDB():
             c.execute(sql, values)
         conn.commit()
 
-    def get_collection(self, chrom=''):
+    def get_collection(self, chrom='', coverage=1):
         """Retrieve a SpliceCollection from the SpliceDB"""
         conn = self.get_connection()
         c = conn.cursor()
 
         sql = "SELECT " + ",".join(Splice.sql_fields) + " FROM splices"
+        conditions = []
         data = []
         if chrom != '':
-            sql += " WHERE chrom=?"
+            conditions.append("chrom=?")
             data.append(chrom)
+        if coverage is not None and coverage > 1:
+            conditions.append("coverage>=?")
+            data.append(coverage)
+
+        if len(conditions) > 0:
+            sql += " WHERE " + " AND ".join(conditions)
+
+        logging.debug(sql)
         c.execute(sql, data)
 
         col = SpliceCollection()
