@@ -46,6 +46,8 @@ def main():
     parser.add_argument("output", help="Path to output the created gff file")
     parser.add_argument('input', help='Splice db to use')
     parser.add_argument(
+        '--gtf', dest='gtf', help='GFT file with genes features')
+    parser.add_argument(
         '--coverage', dest='coverage', default=1, help='Minimum coverage')
     parser.add_argument(
             '-d', '--debug',
@@ -62,7 +64,7 @@ def main():
 
     logging.basicConfig(level=args.loglevel)
 
-    create_gff(args.input, args.output, int(args.coverage))
+    create_gff(args.input, args.output, args.gtf, int(args.coverage))
 
 
 if __name__ == "__main__":
