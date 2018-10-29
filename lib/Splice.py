@@ -194,9 +194,9 @@ class Splice():
 class SpliceCollection():
     """Collection of splices"""
 
-    def __init__(self):
-        self.splices = {}
-        self.size = 0
+    def __init__(self, splices=[]):
+        self.splices = splices
+        self.size = len(splices)
 
     def add_splices(self, splices):
         for splice in splices:
@@ -262,6 +262,15 @@ class SpliceDB():
 
     def get_collection(self, chrom='', coverage=1):
         """Retrieve a SpliceCollection from the SpliceDB"""
+
+        splices = self.get_splices(chrom, coverage)
+
+        col = SpliceCollection(splices)
+
+        return col
+
+    def get_splices(self, chrom='', coverage=1):
+        """Retrieve a raw list of splices from the SpliceDB"""
         conn = self.get_connection()
         c = conn.cursor()
 
@@ -281,7 +290,7 @@ class SpliceDB():
         logging.debug(sql)
         c.execute(sql, data)
 
-        col = SpliceCollection()
+        splices = []
         for row in c.fetchall():
             s = {}
             for i, val in enumerate(row):
@@ -296,6 +305,6 @@ class SpliceDB():
                 s['right_flank'],
                 s['coverage']
             )
-            col.add_splice(splice)
+            splices.append(splice)
 
-        return col
+        return splices
