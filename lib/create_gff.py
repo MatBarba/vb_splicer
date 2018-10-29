@@ -4,19 +4,35 @@ import argparse
 import logging
 
 from Splice import SpliceDB
+from SimpleGTF import SimpleGTF
 from BCBio import GFF
 
 
-def create_gff(input, output, coverage):
+def create_gff(input, output, gtf_path, coverage):
     input_db = SpliceDB(input)
-    col = input_db.get_collection(coverage=coverage)
+    splices = input_db.get_splices(coverage=coverage)
 
-    if col.size == 0:
-        logging.warn("Collection is empty, abort")
+    if len(splices) == 0:
+        logging.warn("No splices, abort")
         return
 
+    # FILTER BY GENES
+    # genes = get_genes(gtf_path)
+
+    print_gff(splices, output)
+
+
+def get_genes(gtf_path):
+
+    # First import the genes
+    with open(gtf_path) as gtf:
+        genes = SimpleGTF.parse_GTF(gtf.readlines())
+    return genes
+
+
+def print_gff(splices, output):
     records = []
-    for splice in sorted(col.get_splices(), key=lambda x: x.key):
+    for splice in splices:
         records.append(splice.get_gff_record())
 
     logging.info("%d records to write in GFF" % len(records))
@@ -25,7 +41,7 @@ def create_gff(input, output, coverage):
         GFF.write(records, gff)
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("output", help="Path to output the created gff file")
     parser.add_argument('input', help='Splice db to use')
@@ -47,3 +63,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=args.loglevel)
 
     create_gff(args.input, args.output, int(args.coverage))
+
+
+if __name__ == "__main__":
+    main()
