@@ -33,6 +33,12 @@ class Splice():
                              str(self.end),
                              self.strand
                              ])
+        self.leftkey = "-".join([self.chrom,
+                                 str(self.start)
+                                 ])
+        self.rightkey = "-".join([self.chrom,
+                                  str(self.end)
+                                  ])
 
     def __str__(self):
         return "%s:%d-%d (%s) [%d-%d]\n" % (
@@ -197,6 +203,8 @@ class SpliceCollection():
     def __init__(self, splices=[]):
         self.splices = []
         self.keys = {}
+        self.leftkeys = {}
+        self.rightkeys = {}
         self.size = 0
         self.add_splices(splices)
 
@@ -208,11 +216,24 @@ class SpliceCollection():
         if self.is_known(splice):
             i = self.keys[splice.key]
             self.splices[i].expand(splice)
+
         else:
             self.splices.append(splice)
             i = self.size
             self.keys[splice.key] = i
             self.size += 1
+
+            # Increase left key
+            if splice.leftkey in self.leftkeys:
+                self.leftkeys[splice.leftkey].append(i)
+            else:
+                self.leftkeys[splice.leftkey] = [i]
+
+            # Increase right key
+            if splice.rightkey in self.rightkeys:
+                self.rightkeys[splice.rightkey].append(i)
+            else:
+                self.rightkeys[splice.rightkey] = [i]
 
     def get_splices(self):
         return self.splices
@@ -228,6 +249,22 @@ class SpliceCollection():
         if key in self.keys:
             i = self.keys[key]
             return self.splices[i]
+
+    def get_splices_by_leftkey(self, leftkey):
+        splices = []
+        if leftkey in self.leftkeys:
+            indexes = self.leftkeys[leftkey]
+            for i in indexes:
+                splices.append(splices[i])
+        return splices
+
+    def get_splices_by_rightkey(self, rightkey):
+        splices = []
+        if rightkey in self.rightkeys:
+            indexes = self.rightkeys[rightkey]
+            for i in indexes:
+                splices.append(splices[i])
+        return splices
 
 
 class SpliceDB():
