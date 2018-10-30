@@ -8,7 +8,7 @@ from SimpleGTF import SimpleGTF
 from BCBio import GFF
 
 
-def create_gff(input, output, gtf_path, filters=[], coverage=1):
+def create_gff(input, output, gtf_path, filters=None, coverage=1):
     input_db = SpliceDB(input)
     collection = input_db.get_collection(coverage=coverage)
 
@@ -17,15 +17,19 @@ def create_gff(input, output, gtf_path, filters=[], coverage=1):
         return
 
     # FILTER BY GENES
-    if len(filters) > 0 and gtf_path is not None:
+    if filters is not None and gtf_path is not None:
         logging.warn("Filtering now")
-        collection = filter_with_genes(collection, gtf_path, filters)
+
+        if filters == 'known':
+            collection = filter_known_splices(collection, gtf_path)
+        else:
+            raise Exception("Unknown filter: %s" % filters)
 
     logging.info("Final number of splices: %d" % collection.size)
     print_gff(collection, output)
 
 
-def filter_with_genes(collection, gtf_path, filters):
+def filter_known_splices(collection, gtf_path):
     genes = get_genes(gtf_path)
 
     # Find known introns
@@ -37,8 +41,6 @@ def filter_with_genes(collection, gtf_path, filters):
         'intron': 0,
         'known': 0
     }
-
-    n_splices = 0
 
     for gene in genes:
         stats['gene'] += 1
@@ -98,6 +100,9 @@ def main():
     parser.add_argument(
         '--gtf', dest='gtf', help='GFT file with genes features')
     parser.add_argument(
+        '--filter', dest='filter', default='known',
+        help='GTF filter: known, startends, links')
+    parser.add_argument(
         '--coverage', dest='coverage', default=1, help='Minimum coverage')
     parser.add_argument(
             '-d', '--debug',
@@ -114,8 +119,8 @@ def main():
 
     logging.basicConfig(level=args.loglevel)
 
-    filters = ['known']
-    create_gff(args.input, args.output, args.gtf, filters, int(args.coverage))
+    create_gff(
+        args.input, args.output, args.gtf, args.filter, int(args.coverage))
 
 if __name__ == "__main__":
     main()
