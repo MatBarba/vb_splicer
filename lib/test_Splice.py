@@ -27,8 +27,6 @@ class TestSplice(unittest.TestCase):
             Splice('SEQ_REGION')
         with self.assertRaises(TypeError):
             Splice('SEQ_REGION', 1)
-        with self.assertRaises(TypeError):
-            Splice('SEQ_REGION', 1, 10)
 
         with self.assertRaises(TypeError):
             Splice(
@@ -38,22 +36,22 @@ class TestSplice(unittest.TestCase):
             Splice(
                 chrom='SEQ_REGION',
                 start=1,
-            )
-        with self.assertRaises(TypeError):
-            Splice(
-                chrom='SEQ_REGION',
-                start=1,
-                end=10,
             )
 
     def test_splice_creation(self):
         """Test splice creation"""
 
+        Splice('SEQ_REGION', 1, 10)
         Splice('SEQ_REGION', 1, 10, '-')
         Splice('SEQ_REGION', 1, 10, '+')
         Splice('SEQ_REGION', 1, 10, '-', 2)
         Splice('SEQ_REGION', 1, 10, '-', 2, 3)
 
+        Splice(
+            chrom='SEQ_REGION',
+            start=1,
+            end=10,
+        )
         Splice(
             chrom='SEQ_REGION',
             start=1,
@@ -88,9 +86,25 @@ class TestSplice(unittest.TestCase):
         splice2 = Splice('SEQ_REGION', 1, 10, '+', 10, 3)
         splice3 = Splice('SEQ_REGION', 1, 10, '.', 10, 3)
 
-        self.assertEqual(splice1.key, "SEQ_REGION-1-10--")
-        self.assertEqual(splice2.key, "SEQ_REGION-1-10-+")
-        self.assertEqual(splice3.key, "SEQ_REGION-1-10-.")
+        self.assertEqual(splice1.key, "SEQ_REGION-1-10")
+        self.assertEqual(splice2.key, "SEQ_REGION-1-10")
+        self.assertEqual(splice3.key, "SEQ_REGION-1-10")
+
+    def test_leftkey(self):
+        splice1 = Splice('SEQ_REGION', 1, 10, '-', 2, 3)
+        splice2 = Splice('SEQ_REGION', 1, 10, '+', 10, 3)
+        splice3 = Splice('SEQ_REGION', 2, 10, '.', 10, 3)
+
+        self.assertEqual(splice1.leftkey, "SEQ_REGION-1")
+        self.assertEqual(splice2.leftkey, "SEQ_REGION-1")
+        self.assertEqual(splice3.leftkey, "SEQ_REGION-2")
+
+    def test_rightkey(self):
+        splice1 = Splice('SEQ_REGION', 1, 10, '-', 2, 3)
+        splice2 = Splice('SEQ_REGION', 1, 15, '+', 10, 3)
+
+        self.assertEqual(splice1.rightkey, "SEQ_REGION-10")
+        self.assertEqual(splice2.rightkey, "SEQ_REGION-15")
 
     def test_from_align(self):
         """Test splice creation from an actual SAM line (no gap)"""
@@ -172,6 +186,11 @@ class TestSplice(unittest.TestCase):
 
 
 class TestSpliceCollection(unittest.TestCase):
+    test_splices = [
+        Splice('SEQ_REGION', 1, 10, '-'),
+        Splice('SEQ_REGION', 1, 10, '-', 5, 5),
+        Splice('SEQ_REGION', 10, 20, '+')
+    ]
 
     def test_splice_collection_creation(self):
         """Test splice collection creation"""
@@ -180,17 +199,72 @@ class TestSpliceCollection(unittest.TestCase):
         self.assertEqual(col.size, 0)
         self.assertEqual(col.get_splices(), [])
 
-        splice1 = Splice('SEQ_REGION', 1, 10, '-')
-        splice2 = Splice('SEQ_REGION', 1, 10, '-', 5, 5)
-        splice3 = Splice('SEQ_REGION', 10, 20, '+')
+    def test_splice_collection_add_splice(self):
+        """Test splice collection add splice"""
 
-        col.add_splice(splice1)
+        col = SpliceCollection()
+
+        col.add_splice(self.test_splices[0])
         self.assertEqual(col.size, 1)
-        col.add_splice(splice2)
+        col.add_splice(self.test_splices[1])
         self.assertEqual(col.size, 1)
-        col.add_splice(splice3)
+        col.add_splice(self.test_splices[2])
         self.assertEqual(col.size, 2)
 
+    def test_splice_collection_add_splices(self):
+        """Test splice collection add a list of splices"""
+
+        col = SpliceCollection()
+        col.add_splices(self.test_splices)
+        self.assertEqual(col.size, 2)
+
+    def test_splice_collection_get_same_splice(self):
+        """Test splice collection add a list of splices"""
+
+        col = SpliceCollection()
+        col.add_splices(self.test_splices)
+
+        same1 = col.get_same_splice(self.test_splices[1])
+        self.assertEqual(same1.key, "SEQ_REGION-1-10")
+        same2 = col.get_same_splice(Splice("A", 1, 10))
+        self.assertEqual(same2, None)
+
+    def test_splice_collection_is_known(self):
+        """Test splice collection is known"""
+
+        col = SpliceCollection()
+        col.add_splices(self.test_splices)
+
+        known1 = col.is_known(self.test_splices[0])
+        self.assertEqual(known1, True)
+        known2 = col.is_known(Splice("A", 1, 10))
+        self.assertEqual(known2, False)
+
+    def test_splice_collection_left_is_known(self):
+        """Test splice collection left is known"""
+
+        col = SpliceCollection()
+        col.add_splices(self.test_splices)
+
+        known1 = col.left_is_known(self.test_splices[0])
+        self.assertEqual(known1, True)
+        known2 = col.left_is_known(Splice("SEQ_REGION", 1, 100))
+        self.assertEqual(known2, True)
+        known3 = col.left_is_known(Splice("SEQ_REGION", 2, 10))
+        self.assertEqual(known3, False)
+
+    def test_splice_collection_right_is_known(self):
+        """Test splice collection right is known"""
+
+        col = SpliceCollection()
+        col.add_splices(self.test_splices)
+
+        known1 = col.right_is_known(self.test_splices[0])
+        self.assertEqual(known1, True)
+        known2 = col.right_is_known(Splice("SEQ_REGION", 2, 10))
+        self.assertEqual(known2, True)
+        known3 = col.right_is_known(Splice("SEQ_REGION", 1, 100))
+        self.assertEqual(known3, False)
 
 if __name__ == '__main__':
         unittest.main()
