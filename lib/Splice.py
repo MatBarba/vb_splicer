@@ -342,7 +342,6 @@ class SpliceDB():
         c = conn.cursor()
 
         sql = "SELECT " + ",".join(Splice.sql_fields) + " FROM splices"
-        sql += " ORDER BY chrom, start, end, strand"
         conditions = []
         data = []
         if chrom != '':
@@ -354,6 +353,8 @@ class SpliceDB():
 
         if len(conditions) > 0:
             sql += " WHERE " + " AND ".join(conditions)
+
+        sql += " ORDER BY chrom, start, end, strand"
 
         logging.debug(sql)
         c.execute(sql, data)
