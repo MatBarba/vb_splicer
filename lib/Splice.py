@@ -195,22 +195,39 @@ class SpliceCollection():
     """Collection of splices"""
 
     def __init__(self, splices=[]):
-        self.splices = splices
-        self.size = len(splices)
+        self.splices = []
+        self.keys = {}
+        self.size = 0
+        self.add_splices(splices)
 
     def add_splices(self, splices):
         for splice in splices:
             self.add_splice(splice)
 
     def add_splice(self, splice):
-        if splice.key in self.splices:
-            self.splices[splice.key].expand(splice)
+        if self.is_known(splice):
+            i = self.keys[splice.key]
+            self.splices[i].expand(splice)
         else:
-            self.splices[splice.key] = splice
+            self.splices.append(splice)
+            i = self.size
+            self.keys[splice.key] = i
             self.size += 1
 
     def get_splices(self):
-        return list(self.splices.values())
+        return self.splices
+
+    def is_known(self, splice):
+        return splice.key in self.keys
+
+    def get_same_splice(self, splice):
+        if self.is_known(splice):
+            return self.get_splice_by_key(splice.key)
+
+    def get_splice_by_key(self, key):
+        if key in self.keys:
+            i = self.keys[key]
+            return self.splices[i]
 
 
 class SpliceDB():
