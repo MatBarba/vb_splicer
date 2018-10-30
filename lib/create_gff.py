@@ -3,36 +3,86 @@
 import argparse
 import logging
 
-from Splice import SpliceDB
+from Splice import Splice, SpliceCollection, SpliceDB
 from SimpleGTF import SimpleGTF
 from BCBio import GFF
 
 
-def create_gff(input, output, gtf_path, coverage):
+def create_gff(input, output, gtf_path, filters=[], coverage=1):
     input_db = SpliceDB(input)
-    splices = input_db.get_splices(coverage=coverage)
+    collection = input_db.get_collection(coverage=coverage)
 
-    if len(splices) == 0:
+    if collection.size == 0:
         logging.warn("No splices, abort")
         return
 
     # FILTER BY GENES
-    # genes = get_genes(gtf_path)
+    if len(filters) > 0 and gtf_path is not None:
+        logging.warn("Filtering now")
+        collection = filter_with_genes(collection, gtf_path, filters)
 
-    print_gff(splices, output)
+    logging.info("Final number of splices: %d" % collection.size)
+    print_gff(collection, output)
+
+
+def filter_with_genes(collection, gtf_path, filters):
+    genes = get_genes(gtf_path)
+
+    # Find known introns
+    known_introns = SpliceCollection()
+    stats = {
+        'gene': 0,
+        'transcript': 0,
+        'exon': 0,
+        'intron': 0,
+        'known': 0
+    }
+
+    n_splices = 0
+
+    for gene in genes:
+        stats['gene'] += 1
+        for tr in gene.transcripts:
+            stats['transcript'] += 1
+            exons = tr.exons
+            if len(exons) > 0:
+                stats['exon'] += 1
+                start = 0
+                end = 0
+                for exon in sorted(exons, key=lambda x: x.start):
+                    if start > 0:
+                        stats['intron'] += 1
+                        end = exon.start
+                        intron = Splice(exon.chrom, start, end, '.')
+
+                        if collection.is_known(intron):
+                            stats['known'] += 1
+                            db_splice = collection.get_same_splice(intron)
+                            known_introns.add_splice(db_splice)
+                    start = exon.end
+
+    logging.info("Genes stats:")
+    for stat, num in stats.items():
+        logging.info("%s : %d" % (stat, num))
+
+    return known_introns
 
 
 def get_genes(gtf_path):
+    if gtf_path is None:
+        logging.info("No gtf provided: no gene data used")
+        return []
 
     # First import the genes
+    logging.info("Import genes")
     with open(gtf_path) as gtf:
         genes = SimpleGTF.parse_GTF(gtf.readlines())
     return genes
 
 
-def print_gff(splices, output):
+def print_gff(collection, output):
     records = []
-    for splice in splices:
+    for splice in collection.get_splices():
         records.append(splice.get_gff_record())
 
     logging.info("%d records to write in GFF" % len(records))
@@ -64,8 +114,8 @@ def main():
 
     logging.basicConfig(level=args.loglevel)
 
-    create_gff(args.input, args.output, args.gtf, int(args.coverage))
-
+    filters = ['known']
+    create_gff(args.input, args.output, args.gtf, filters, int(args.coverage))
 
 if __name__ == "__main__":
     main()
