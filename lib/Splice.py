@@ -19,7 +19,7 @@ class Splice():
     sql_fields = ('chrom', 'start', 'end', 'strand',
                   'left_flank', 'right_flank', 'coverage',)
 
-    def __init__(self, chrom, start, end, strand,
+    def __init__(self, chrom, start, end, strand='.',
                  left_flank=1, right_flank=1, coverage=1):
         self.chrom = chrom
         self.start = start
