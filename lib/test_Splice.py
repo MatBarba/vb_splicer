@@ -86,9 +86,11 @@ class TestSplice(unittest.TestCase):
     def test_key(self):
         splice1 = Splice('SEQ_REGION', 1, 10, '-', 2, 3)
         splice2 = Splice('SEQ_REGION', 1, 10, '+', 10, 3)
+        splice3 = Splice('SEQ_REGION', 1, 10, '.', 10, 3)
 
-        self.assertEqual(splice1.key, "SEQ_REGION|1|10|-")
-        self.assertEqual(splice2.key, "SEQ_REGION|1|10|+")
+        self.assertEqual(splice1.key, "SEQ_REGION-1-10--")
+        self.assertEqual(splice2.key, "SEQ_REGION-1-10-+")
+        self.assertEqual(splice3.key, "SEQ_REGION-1-10-.")
 
     def test_from_align(self):
         """Test splice creation from an actual SAM line (no gap)"""
@@ -110,7 +112,7 @@ class TestSplice(unittest.TestCase):
 
         # Check the splice object
         if len(splices) == 1:
-            splice_text = "SEQ_REGION:14070-14170 (-) [12-26]\n"
+            splice_text = "SEQ_REGION:14070-14170 (.) [12-26]\n"
             self.assertEqual(str(splices[0]), splice_text)
 
     def test_two_gaps(self):
@@ -126,8 +128,8 @@ class TestSplice(unittest.TestCase):
 
         # Check the splice objects
         if len(splices) == 2:
-            splice_text_1 = "SEQ_REGION:14070-14170 (-) [12-12]\n"
-            splice_text_2 = "SEQ_REGION:14082-14282 (-) [12-14]\n"
+            splice_text_1 = "SEQ_REGION:14070-14170 (.) [12-12]\n"
+            splice_text_2 = "SEQ_REGION:14082-14282 (.) [12-14]\n"
             self.assertEqual(str(splices[0]), splice_text_1)
             self.assertEqual(str(splices[1]), splice_text_2)
 
