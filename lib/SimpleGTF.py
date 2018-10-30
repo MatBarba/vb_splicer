@@ -9,8 +9,8 @@ class Feature():
     def __init__(self, id, chrom, start, end, strand):
         self.id = id
         self.chrom = chrom
-        self.start = start
-        self.end = end
+        self.start = int(start)
+        self.end = int(end)
         self.strand = strand
 
 
@@ -50,8 +50,15 @@ class SimpleGTF():
         cur_gene, cur_transcript, cur_exon = None, None, None
 
         for line in lines:
+            if line[0] == '#':
+                continue
+
             (chrom, source, type, start, end,
              score, strand, phase, group) = line.split("\t")
+
+            start = int(start)
+            end = int(end)
+            start -= 1
 
             names = SimpleGTF.get_names(group)
             if len(names) == 0:
