@@ -30,8 +30,7 @@ class Splice():
         self.coverage = coverage
         self.key = "-".join([self.chrom,
                              str(self.start),
-                             str(self.end),
-                             self.strand
+                             str(self.end)
                              ])
         self.leftkey = "-".join([self.chrom,
                                  str(self.start)
@@ -218,28 +217,36 @@ class SpliceCollection():
             self.splices[i].expand(splice)
 
         else:
-            self.splices.append(splice)
+            # We're going to add 1 splice, use the previous size for the index
             i = self.size
+
+            self.splices.append(splice)
             self.keys[splice.key] = i
+
+            # Init left/right keys if needed
+            if splice.leftkey not in self.leftkeys:
+                self.leftkeys[splice.leftkey] = []
+            if splice.rightkey not in self.rightkeys:
+                self.rightkeys[splice.rightkey] = []
+
+            # Append splice index to left/right keys
+            self.leftkeys[splice.leftkey].append(i)
+            self.rightkeys[splice.rightkey].append(i)
+
+            # Increment size only at the end
             self.size += 1
-
-            # Increase left key
-            if splice.leftkey in self.leftkeys:
-                self.leftkeys[splice.leftkey].append(i)
-            else:
-                self.leftkeys[splice.leftkey] = [i]
-
-            # Increase right key
-            if splice.rightkey in self.rightkeys:
-                self.rightkeys[splice.rightkey].append(i)
-            else:
-                self.rightkeys[splice.rightkey] = [i]
 
     def get_splices(self):
         return self.splices
 
     def is_known(self, splice):
         return splice.key in self.keys
+
+    def left_is_known(self, splice):
+        return splice.leftkey in self.leftkeys
+
+    def right_is_known(self, splice):
+        return splice.rightkey in self.rightkeys
 
     def get_same_splice(self, splice):
         if self.is_known(splice):
@@ -250,12 +257,18 @@ class SpliceCollection():
             i = self.keys[key]
             return self.splices[i]
 
+    def get_left_splices(self, splice):
+        return self.get_splices_by_leftkey(splice.leftkey)
+
+    def get_right_splices(self, splice):
+        return self.get_splices_by_rightkey(splice.rightkey)
+
     def get_splices_by_leftkey(self, leftkey):
         splices = []
         if leftkey in self.leftkeys:
             indexes = self.leftkeys[leftkey]
             for i in indexes:
-                splices.append(splices[i])
+                splices.append(self.splices[i])
         return splices
 
     def get_splices_by_rightkey(self, rightkey):
@@ -263,7 +276,7 @@ class SpliceCollection():
         if rightkey in self.rightkeys:
             indexes = self.rightkeys[rightkey]
             for i in indexes:
-                splices.append(splices[i])
+                splices.append(self.splices[i])
         return splices
 
 
