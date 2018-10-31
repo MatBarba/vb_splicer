@@ -189,24 +189,27 @@ sub pipeline_analyses {
  
     {
       -logic_name => 'Merge_splices',
+      -module     => 'MergeSplices',
+      -language   => 'python3',
+      -parameters        => {
+        splice_dir     => $self->o('splice_dir'),
+      },
+      -analysis_capacity => 1,
+      -max_retry_count => 0,
+      -meadow_type       => 'LSF',
+      -rc_name    => 'bigmem',
+      -flow_into  => {
+        '2' => 'Create_GFF',
+      }
+    },
+    
+    {
+      -logic_name => 'Create_GFF',
       -module     => 'Bio::EnsEMBL::Hive::RunnableDB::Dummy',
       -rc_name    => 'default',
       -meadow_type       => 'LOCAL',
       -analysis_capacity => 1,
-      -batch_size => 500,
     },
- 
-#     {
-#       -logic_name => 'Merge_splices',
-#       -module     => 'MergeSplices',
-#       -language   => 'python3',
-#       -max_retry_count => 0,
-#       -rc_name    => 'default',
-#       -meadow_type       => 'LOCAL',
-#       -flow_into  => {
-#         '2' => 'Create_GFF',
-#       }
-#     },
 # 
 #     {
 #       -logic_name => 'Create_GFF',
