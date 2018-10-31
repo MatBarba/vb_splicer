@@ -292,6 +292,7 @@ class SpliceDB():
 
     def get_connection(self):
         if self.conn is None:
+            print("Connect to %s" % self.path)
             self.conn = sqlite3.connect(self.path)
         return self.conn
 
