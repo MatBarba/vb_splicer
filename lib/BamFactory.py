@@ -14,7 +14,9 @@ class BamFactory(eHive.BaseRunnable):
         species_bam_dir = os.path.join(bam_dir, species)
 
         if os.path.exists(species_bam_dir):
-            bams = os.listdir(species_bam_dir)
+            bams = filter(
+                lambda x: x.endswith('.bam'), os.listdir(species_bam_dir)
+            )
 
             for bam_file in bams:
                 bam_path = os.path.join(species_bam_dir, bam_file)
