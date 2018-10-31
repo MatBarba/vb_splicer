@@ -22,6 +22,4 @@ class GtfFactory(eHive.BaseRunnable):
             self.dataflow({}, 2)
 
         # Continue
-        self.dataflow({
-            'gtf_file': self.param('species'),
-        }, 3)
+        self.dataflow({'gtf_file': gtf_file}, 3)

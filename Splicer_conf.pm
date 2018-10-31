@@ -36,6 +36,7 @@ sub default_options {
     meta_filters => {},
     
     force_gtf => 0,
+    coverage => 1,
 
     debug => 0,
   };
@@ -202,26 +203,23 @@ sub pipeline_analyses {
         '2' => 'Create_GFF',
       }
     },
-    
+
     {
       -logic_name => 'Create_GFF',
-      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::Dummy',
-      -rc_name    => 'default',
-      -meadow_type       => 'LOCAL',
+      -module     => 'CreateGFF',
+      -language   => 'python3',
+      -parameters        => {
+        gff_dir     => $self->o('gff_dir'),
+        coverage    => $self->o('coverage'),
+      },
       -analysis_capacity => 1,
+      -max_retry_count => 0,
+      -rc_name    => 'bigmem',
+      -meadow_type       => 'LSF',
+      -flow_into  => {
+        '2' => '?accu_name=gffs&accu_address={species}[]&accu_input_variable=gff',
+      }
     },
-# 
-#     {
-#       -logic_name => 'Create_GFF',
-#       -module     => 'CreateGFF',
-#       -language   => 'python3',
-#       -max_retry_count => 0,
-#       -rc_name    => 'default',
-#       -meadow_type       => 'LOCAL',
-#       -flow_into  => {
-#         '2' => '?accu_name=gffs&accu_address={species}[]&accu_input_variable=gff',
-#       }
-#     },
   ];
 }
 
