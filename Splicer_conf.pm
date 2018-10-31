@@ -179,7 +179,7 @@ sub pipeline_analyses {
         splice_dir     => $self->o('splice_dir'),
       },
       
-      -analysis_capacity => 1,
+      -analysis_capacity => 30,
       -max_retry_count => 0,
       -meadow_type       => 'LSF',
       -rc_name    => 'bigmem',
@@ -195,7 +195,7 @@ sub pipeline_analyses {
       -parameters        => {
         splice_dir     => $self->o('splice_dir'),
       },
-      -analysis_capacity => 1,
+      -analysis_capacity => 10,
       -max_retry_count => 0,
       -meadow_type       => 'LSF',
       -rc_name    => 'bigmem',
@@ -212,7 +212,7 @@ sub pipeline_analyses {
         gff_dir     => $self->o('gff_dir'),
         coverage    => $self->o('coverage'),
       },
-      -analysis_capacity => 1,
+      -analysis_capacity => 10,
       -max_retry_count => 0,
       -rc_name    => 'bigmem',
       -meadow_type       => 'LSF',
