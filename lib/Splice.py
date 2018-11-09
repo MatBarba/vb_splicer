@@ -292,7 +292,7 @@ class SpliceDB():
 
     def get_connection(self):
         if self.conn is None:
-            print("Connect to %s" % self.path)
+            logging.debug("Connect to %s" % self.path)
             self.conn = sqlite3.connect(self.path)
         return self.conn
 
@@ -312,6 +312,7 @@ class SpliceDB():
                     right_flank int,
                     coverage int
                 )''')
+        c.execute('''CREATE INDEX chrom_idx ON splices (chrom);''')
 
     def add_collection(self, collection):
         """Store all the Splices from a SpliceCollection in the SpliceDB"""
@@ -328,16 +329,16 @@ class SpliceDB():
             c.execute(sql, values)
         conn.commit()
 
-    def get_collection(self, chrom='', coverage=1):
+    def get_collection(self, chrom='', chroms=[], coverage=1):
         """Retrieve a SpliceCollection from the SpliceDB"""
 
-        splices = self.get_splices(chrom, coverage)
+        splices = self.get_splices(chrom, chroms, coverage)
 
         col = SpliceCollection(splices)
 
         return col
 
-    def get_splices(self, chrom='', coverage=1):
+    def get_splices(self, chrom='', chroms=[], coverage=1):
         """Retrieve a raw list of splices from the SpliceDB"""
         conn = self.get_connection()
         c = conn.cursor()
@@ -348,7 +349,15 @@ class SpliceDB():
         if chrom != '':
             conditions.append("chrom=?")
             data.append(chrom)
-        if coverage is not None and coverage > 1:
+        if len(chroms) > 0:
+            chroms_cond = "chrom=?"
+            chrom_condition = []
+            for chrom in chroms:
+                chrom_condition.append(chroms_cond)
+                data.append(chrom)
+
+            conditions.append("(" + " OR ".join(chrom_condition) + ")")
+        if coverage > 1:
             conditions.append("coverage>=?")
             data.append(coverage)
 

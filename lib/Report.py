@@ -23,7 +23,7 @@ class Report(eHive.BaseRunnable):
             gff_files = gffs[species]
             n_files = len(gff_files)
             for gff in gff_files:
-                text_lines.append("\t+ %s" % gff)
+                text_lines.append("\t%s" % gff)
 
         text_lines.insert(0, '%d GFF files for %s' % (n_files, species))
         return"\n".join(text_lines)

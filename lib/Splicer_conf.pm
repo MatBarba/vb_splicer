@@ -36,6 +36,8 @@ sub default_options {
     meta_filters => {},
     
     force_gtf => 0,
+    force_splice_db => 0,
+    force_merge => 0,
     coverage => 1,
 
     debug => 0,
@@ -136,7 +138,7 @@ sub pipeline_analyses {
       -rc_name           => 'default',
       -flow_into  => {
         '2->A' => 'GTF_dumper',
-        'A->3' => 'BAM_factory',
+        'A->3' => 'SpliceDB_factory',
       },
     },
 
@@ -156,11 +158,12 @@ sub pipeline_analyses {
     },
     
     {
-      -logic_name        => 'BAM_factory',
-      -module            => 'BamFactory',
+      -logic_name        => 'SpliceDB_factory',
+      -module            => 'SpliceDBFactory',
       -language   => 'python3',
       -parameters        => {
         bam_dir     => $self->o('bam_dir'),
+        splice_dir     => $self->o('splice_dir'),
       },
       -max_retry_count   => 0,
       -meadow_type       => 'LOCAL',
@@ -176,7 +179,7 @@ sub pipeline_analyses {
       -module     => 'ExtractSplices',
       -language   => 'python3',
       -parameters        => {
-        splice_dir     => $self->o('splice_dir'),
+        force_splice_db => $self->o('force_splice_db'),
       },
       
       -analysis_capacity => 30,
@@ -194,6 +197,7 @@ sub pipeline_analyses {
       -language   => 'python3',
       -parameters        => {
         splice_dir     => $self->o('splice_dir'),
+        force_merge => $self->o('force_merge'),
       },
       -analysis_capacity => 10,
       -max_retry_count => 0,
@@ -214,7 +218,25 @@ sub pipeline_analyses {
       },
       -analysis_capacity => 10,
       -max_retry_count => 0,
-      -rc_name    => 'bigmem',
+      -rc_name    => 'biggermem',
+      -meadow_type       => 'LSF',
+      -flow_into  => {
+        '2' => '?accu_name=gffs&accu_address={species}[]&accu_input_variable=gff',
+        '-1' => 'Create_GFF_highmem',
+      }
+    },
+
+    {
+      -logic_name => 'Create_GFF_highmem',
+      -module     => 'CreateGFF',
+      -language   => 'python3',
+      -parameters        => {
+        gff_dir     => $self->o('gff_dir'),
+        coverage    => $self->o('coverage'),
+      },
+      -analysis_capacity => 10,
+      -max_retry_count => 0,
+      -rc_name    => 'biggermem',
       -meadow_type       => 'LSF',
       -flow_into  => {
         '2' => '?accu_name=gffs&accu_address={species}[]&accu_input_variable=gff',
@@ -234,6 +256,7 @@ sub resource_classes {
     },
     'normal'            => {'LSF' => ['-q production-rh7 -M  1000 -R "rusage[mem=1000]"', $reg_requirement]},
     'bigmem'           => {'LSF' => ['-q production-rh7 -M  4000 -R "rusage[mem=4000]"', $reg_requirement]},
+    'biggermem'           => {'LSF' => ['-q production-rh7 -M  16000 -R "rusage[mem=16000]"', $reg_requirement]},
   }
 }
 

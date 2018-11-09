@@ -32,7 +32,6 @@ class CreateGFF(eHive.BaseRunnable):
         # Create the db file name
         gff_basename = os.path.join(gff_dir, species)
         outputs = {
-            'all': gff_basename + '_all.gff',
             'known': gff_basename + '_known.gff',
             'startends': gff_basename + '_startends.gff',
             'links': gff_basename + '_links.gff',
@@ -52,7 +51,7 @@ class CreateGFF(eHive.BaseRunnable):
         logging.info(
             "Import coverage filtered splices (coverage >= %d)" % coverage)
         input_db = SpliceDB(input)
-        collection = input_db.get_collection(coverage=coverage)
+        collection = input_db.get_collection()
 
         if collection.size == 0:
             logging.warn("No splices, abort")
@@ -61,7 +60,7 @@ class CreateGFF(eHive.BaseRunnable):
         # FILTER BY GENES
         if gtf_path is not None:
             filters = outputs.keys()
-            cols = self.filter_splices(collection, gtf_path, filters)
+            cols = self.filter_splices(collection, gtf_path, filters, coverage)
             for output, col in cols.items():
                 if output in outputs and outputs[output] is not None:
                     path = outputs[output]
@@ -72,7 +71,7 @@ class CreateGFF(eHive.BaseRunnable):
         if 'all' in outputs:
             self.print_gff(collection, outputs['all'])
 
-    def filter_splices(self, collection, gtf_path, filters):
+    def filter_splices(self, collection, gtf_path, filters, coverage=1):
 
         introns = self.get_introns(gtf_path)
 
@@ -115,7 +114,7 @@ class CreateGFF(eHive.BaseRunnable):
                     outputs['startends'].add_splice(splice)
             else:
                 stats['uncontacted'] += 1
-                if 'others' in filters:
+                if 'others' in filters and splice.coverage >= coverage:
                     outputs['others'].add_splice(splice)
 
         logging.info("Splices filter stats:")

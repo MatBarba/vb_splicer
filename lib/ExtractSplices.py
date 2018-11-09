@@ -2,11 +2,11 @@
 
 import argparse
 import logging
+import os
 
 import HTSeq
 from Splice import Splice, SpliceCollection, SpliceDB
 
-import os
 import eHive
 
 
@@ -14,27 +14,15 @@ class ExtractSplices(eHive.BaseRunnable):
 
     def run(self):
 
-        splice_dir = self.param_required('splice_dir')
-        species = self.param_required('species')
         bam_file = self.param_required('bam_file')
-
-        # Create the dir for the splice db
-        species_dir = os.path.join(splice_dir, species)
-        if not os.path.exists(species_dir):
-            os.makedirs(species_dir)
-
-        # Create the db file name
-        splice_filename = os.path.basename(bam_file)
-        splice_filename = splice_filename.replace('.bam', '.sqlite')
-        splice_db = os.path.join(species_dir, splice_filename)
+        splice_db = self.param_required('splice_db')
+        force_splice_db = self.param('force_splice_db')
 
         # Run it!
-        self.extract_splices(bam_file, splice_db)
+        if force_splice_db or not os.path.exists(splice_db):
+            self.extract_splices(bam_file, splice_db)
 
-        self.dataflow({
-            'species': species,
-            'splice_db': splice_db
-        }, 2)
+        self.dataflow({}, 2)
 
     def extract_splices(self, bam_input, sqlite_output):
         """Extract splices from a bam file, and write them in an SQLite db"""
