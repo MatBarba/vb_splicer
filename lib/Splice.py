@@ -63,21 +63,8 @@ class Splice():
             strand = '.'
         read_start = aln.iv.start
 
-        # Collect gaps spanned by the read
-        # We keep a record of the matched sequence in seq,
-        # and the gaps (potential splice junctions) in gap
-        # There should be +1 seqs than gaps
-        seqs = [0]
-        gaps = []
-
-        cur_seq = 0
-        for c in aln.cigar:
-            if c.type == "N":
-                gaps.append(c.size)
-                seqs.append(0)
-                cur_seq += 1
-            else:
-                seqs[cur_seq] += c.size
+        # Extract sequence length and gaps from CIGAR
+        seqs, gaps = Splice.collect_gaps(aln)
 
         splices = []
         seq_diff = 0
@@ -92,6 +79,25 @@ class Splice():
             )
 
         return splices
+
+    def collect_gaps(aln):
+        # Collect gaps spanned by the read
+        # We keep a record of the matched sequence in seq,
+        # and the gaps (potential splice junctions) in gap
+        # There should be +1 seqs than gaps
+        seqs = [0]
+        gaps = []
+
+        cur_seq = 0
+        for c in aln.cigar:
+            if c.type == "N":
+                gaps.append(c.size)
+                seqs.append(0)
+                cur_seq += 1
+            elif c.type in ("M", "I", "S", "="):
+                seqs[cur_seq] += c.size
+
+        return seqs, gaps
 
     def sql_values(self):
         return [getattr(self, f) for f in self.sql_fields]

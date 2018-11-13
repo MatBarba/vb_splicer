@@ -109,7 +109,9 @@ class TestSplice(unittest.TestCase):
     def test_from_align(self):
         """Test splice creation from an actual SAM line (no gap)"""
 
-        aln = SAM_Alignment.from_SAM_line("\t".join(self.base_sam))
+        custom_sam = self.base_sam
+        custom_sam[5] = "38M"
+        aln = SAM_Alignment.from_SAM_line("\t".join(custom_sam))
         splices = Splice.from_aln(aln)
         self.assertEqual(splices, [])
 
@@ -146,6 +148,25 @@ class TestSplice(unittest.TestCase):
             splice_text_2 = "SEQ_REGION:14082-14282 (.) [12-14]\n"
             self.assertEqual(str(splices[0]), splice_text_1)
             self.assertEqual(str(splices[1]), splice_text_2)
+
+    def test_cigar(self):
+        """Test extraction of gaps from cigar"""
+
+        cigars = [
+            ["12M", [12], []],
+            ["12M100N12M", [12, 12], [100]],
+            ["12M100N12M200N14M", [12, 12, 14], [100, 200]],
+            ["12M1I12M", [25], []],
+            ["12M1D12M", [24], []]
+        ]
+
+        for cigar in cigars:
+            custom_sam = self.base_sam
+            custom_sam[5] = cigar[0]
+            aln = SAM_Alignment.from_SAM_line("\t".join(custom_sam))
+            seqs, gaps = Splice.collect_gaps(aln)
+            self.assertEqual(seqs, cigar[1])
+            self.assertEqual(gaps, cigar[2])
 
     def test_same_splice(self):
         splice1 = Splice('SEQ_REGION', 1, 10, '-', 2, 3)
