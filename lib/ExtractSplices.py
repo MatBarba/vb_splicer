@@ -20,11 +20,11 @@ class ExtractSplices(eHive.BaseRunnable):
 
         # Run it!
         if force_splice_db or not os.path.exists(splice_db):
-            self.extract_splices(bam_file, splice_db)
+            self.__class__.extract_splices(bam_file, splice_db)
 
         self.dataflow({}, 2)
 
-    def extract_splices(self, bam_input, sqlite_output):
+    def extract_splices(bam_input, sqlite_output):
         """Extract splices from a bam file, and write them in an SQLite db"""
 
         logging.info("Read bam file " + bam_input)
