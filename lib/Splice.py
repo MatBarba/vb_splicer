@@ -17,10 +17,10 @@ class Splice():
     """Splice junction found in a read"""
 
     sql_fields = ('chrom', 'start', 'end', 'strand',
-                  'left_flank', 'right_flank', 'coverage',)
+                  'left_flank', 'right_flank', 'coverage', 'tag',)
 
     def __init__(self, chrom, start, end, strand='.',
-                 left_flank=1, right_flank=1, coverage=1):
+                 left_flank=1, right_flank=1, coverage=1, tag='', id=0):
         self.chrom = chrom
         self.start = start
         self.end = end
@@ -28,6 +28,10 @@ class Splice():
         self.left_flank = left_flank
         self.right_flank = right_flank
         self.coverage = coverage
+        self.tag = tag
+        self.id = id
+
+        # Generate keys
         self.key = "-".join([self.chrom,
                              str(self.start),
                              str(self.end)
@@ -81,10 +85,11 @@ class Splice():
         return splices
 
     def collect_gaps(aln):
-        # Collect gaps spanned by the read
-        # We keep a record of the matched sequence in seq,
-        # and the gaps (potential splice junctions) in gap
-        # There should be +1 seqs than gaps
+        """Collect gaps spanned by the read
+        We keep a record of the matched sequence in seq,
+        and the gaps (potential splice junctions) in gap
+        There should be +1 seqs than gaps
+        """
         seqs = [0]
         gaps = []
 
@@ -200,6 +205,9 @@ class Splice():
         rec.features = [top_feat]
 
         return rec
+
+    def tag_splice(self, tag):
+        self.tag = tag
 
 
 class SpliceCollection():
@@ -349,7 +357,10 @@ class SpliceDB():
         conn = self.get_connection()
         c = conn.cursor()
 
-        sql = "SELECT " + ",".join(Splice.sql_fields) + " FROM splices"
+        get_fields = list(Splice.sql_fields)
+        get_fields.append('ROWID')
+
+        sql = "SELECT " + ",".join(get_fields) + " FROM splices"
         conditions = []
         data = []
         if chrom != '':
@@ -379,7 +390,7 @@ class SpliceDB():
         for row in c.fetchall():
             s = {}
             for i, val in enumerate(row):
-                field = Splice.sql_fields[i]
+                field = get_fields[i]
                 s[field] = val
             splice = Splice(
                 s['chrom'],
@@ -388,8 +399,28 @@ class SpliceDB():
                 s['strand'],
                 s['left_flank'],
                 s['right_flank'],
-                s['coverage']
+                coverage=s['coverage'],
+                tag=s['tag'],
+                id=s['ROWID']
             )
             splices.append(splice)
 
         return splices
+
+    def tag_back(self, collection):
+        """Apply the tags of splices back to database"""
+        conn = self.get_connection()
+
+        for splice in collection.get_splices():
+            self.tag_splice(splice, conn.cursor())
+        conn.commit()
+
+    def tag_splice(self, splice, cursor):
+        values = [splice.tag, splice.id]
+        fields = ",".join(["tag", "ROWID"])
+        conditions = "ROWID=?"
+        sql = "UPDATE splices SET tag=? WHERE " + conditions
+        logging.debug(sql)
+        logging.debug(values)
+        cursor.execute(sql, values)
+
