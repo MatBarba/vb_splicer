@@ -17,10 +17,10 @@ class Splice():
     """Splice junction found in a read"""
 
     sql_fields = ('chrom', 'start', 'end', 'strand',
-                  'left_flank', 'right_flank', 'coverage', 'tag',)
+                  'left_flank', 'right_flank', 'coverage', 'tag', 'gene')
 
     def __init__(self, chrom, start, end, strand='.',
-                 left_flank=1, right_flank=1, coverage=1, tag='', id=0):
+                 left_flank=1, right_flank=1, coverage=1, tag=None, gene=None, id=None):
         self.chrom = chrom
         self.start = start
         self.end = end
@@ -30,6 +30,7 @@ class Splice():
         self.coverage = coverage
         self.tag = tag
         self.id = id
+        self.gene = gene
 
         # Generate keys
         self.key = "-".join([self.chrom,
@@ -206,8 +207,11 @@ class Splice():
 
         return rec
 
-    def tag_splice(self, tag):
+    def set_tag(self, tag):
         self.tag = tag
+
+    def set_gene(self, gene):
+        self.gene = gene
 
 
 class SpliceCollection():
@@ -324,7 +328,9 @@ class SpliceDB():
                     strand text,
                     left_flank int,
                     right_flank int,
-                    coverage int
+                    coverage int,
+                    tag text,
+                    gene text
                 )''')
         c.execute('''CREATE INDEX chrom_idx ON splices (chrom);''')
 
@@ -401,6 +407,7 @@ class SpliceDB():
                 s['right_flank'],
                 coverage=s['coverage'],
                 tag=s['tag'],
+                gene=s['gene'],
                 id=s['ROWID']
             )
             splices.append(splice)
@@ -416,10 +423,10 @@ class SpliceDB():
         conn.commit()
 
     def tag_splice(self, splice, cursor):
-        values = [splice.tag, splice.id]
-        fields = ",".join(["tag", "ROWID"])
+        values = [splice.tag, splice.gene, splice.id]
+        fields = ",".join(["tag", "gene", "ROWID"])
         conditions = "ROWID=?"
-        sql = "UPDATE splices SET tag=? WHERE " + conditions
+        sql = "UPDATE splices SET tag=?, gene=? WHERE " + conditions
         logging.debug(sql)
         logging.debug(values)
         cursor.execute(sql, values)

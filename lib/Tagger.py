@@ -36,7 +36,8 @@ class Tagger(eHive.BaseRunnable):
 
         stats = {
             'known': 0,
-            'bridge': 0,
+            'inbridge': 0,
+            'outbridge': 0,
             'left': 0,
             'right': 0,
             'nocontact': 0
@@ -46,22 +47,35 @@ class Tagger(eHive.BaseRunnable):
         for splice in collection.get_splices():
             left_ok = introns.left_is_known(splice)
             right_ok = introns.right_is_known(splice)
+            lefts = introns.get_left_splices(splice)
+            rights = introns.get_right_splices(splice)
 
             if introns.is_known(splice):
+                same = introns.get_same_splice(splice)
+
                 stats['known'] += 1
-                splice.tag_splice('known')
+                splice.set_tag('known')
+                splice.set_gene(same.gene)
             elif left_ok and right_ok:
-                stats['bridge'] += 1
-                splice.tag_splice('bridge')
+                if lefts[0].gene == rights[0].gene:
+                    stats['inbridge'] += 1
+                    splice.set_tag('inbridge')
+                    splice.set_gene(lefts[0].gene)
+                else:
+                    stats['outbridge'] += 1
+                    splice.set_tag('outbridge')
+
             elif left_ok:
                 stats['left'] += 1
-                splice.tag_splice('left')
+                splice.set_tag('left')
+                splice.set_gene(lefts[0].gene)
             elif right_ok:
                 stats['right'] += 1
-                splice.tag_splice('right')
+                splice.set_tag('right')
+                splice.set_gene(rights[0].gene)
             else:
                 stats['nocontact'] += 1
-                splice.tag_splice('nocontact')
+                splice.set_tag('nocontact')
 
         logging.info("Splices filter stats:")
         for stat, num in stats.items():
@@ -96,7 +110,7 @@ class Tagger(eHive.BaseRunnable):
                         if start > 0:
                             stats['intron'] += 1
                             end = exon.start
-                            intron = Splice(exon.chrom, start, end, '.')
+                            intron = Splice(exon.chrom, start, end, '.', gene=gene.id)
                             col.add_splice(intron)
                         start = exon.end
 
