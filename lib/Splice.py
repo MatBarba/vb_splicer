@@ -333,6 +333,7 @@ class SpliceDB():
                     gene text
                 )''')
         c.execute('''CREATE INDEX chrom_idx ON splices (chrom);''')
+        c.execute('''CREATE INDEX tag_idx ON splices (tag);''')
 
     def add_collection(self, collection):
         """Store all the Splices from a SpliceCollection in the SpliceDB"""

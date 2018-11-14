@@ -7,6 +7,7 @@ import sqlite3
 from Splice import SpliceCollection, SpliceDB
 
 import os
+from shutil import copyfile
 import eHive
 
 
@@ -39,6 +40,11 @@ class MergeSplices(eHive.BaseRunnable):
 
     def merge_dbs(self, output_db, input_dbs):
         """Merge a list of SpliceDBs into one"""
+
+        # Only copy if there is only one input db
+        if len(input_dbs) == 1:
+            copyfile(input_dbs[0], output_db)
+            return
 
         db = SpliceDB(output_db)
         db.init()

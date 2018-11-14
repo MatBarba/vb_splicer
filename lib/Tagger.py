@@ -13,6 +13,8 @@ import os
 
 class Tagger(eHive.BaseRunnable):
     def run(self):
+        logging.basicConfig(level=logging.INFO)
+
         splice_db = self.param_required('splice_db')
         gtf_file = self.param_required('gtf_file')
 
@@ -21,7 +23,7 @@ class Tagger(eHive.BaseRunnable):
             return
 
         # Run it
-        tag_splices(splice_db, gtf_file)
+        Tagger.tag_splices(splice_db, gtf_file)
 
     def tag_splices(input, gtf_path):
         input_db = SpliceDB(input)

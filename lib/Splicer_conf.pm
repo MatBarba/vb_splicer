@@ -220,7 +220,20 @@ sub pipeline_analyses {
       -meadow_type       => 'LSF',
       -rc_name    => 'bigmem',
       -flow_into  => {
-        '2' => 'Create_GFF',
+        '2' => 'Tagger',
+      }
+    },
+
+    {
+      -logic_name => 'Tagger',
+      -module     => 'Tagger',
+      -language   => 'python3',
+      -analysis_capacity => 20,
+      -max_retry_count => 0,
+      -rc_name    => 'bigmem',
+      -meadow_type       => 'LSF',
+      -flow_into  => {
+        '1' => 'Create_GFF',
       }
     },
 

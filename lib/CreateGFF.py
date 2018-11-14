@@ -40,7 +40,7 @@ class CreateGFF(eHive.BaseRunnable):
         }
 
         # Run it!
-        create_gff(splice_db, outputs, gtf_file, coverage)
+        CreateGFF.create_gff(splice_db, outputs, coverage)
 
         for gff in outputs.values():
             self.dataflow({
