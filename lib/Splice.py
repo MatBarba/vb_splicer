@@ -349,16 +349,16 @@ class SpliceDB():
             c.execute(sql, values)
         conn.commit()
 
-    def get_collection(self, chrom='', chroms=[], coverage=1):
+    def get_collection(self, chrom='', chroms=[], tags=[], coverage=1):
         """Retrieve a SpliceCollection from the SpliceDB"""
 
-        splices = self.get_splices(chrom, chroms, coverage)
+        splices = self.get_splices(chrom, chroms, tags, coverage)
 
         col = SpliceCollection(splices)
 
         return col
 
-    def get_splices(self, chrom='', chroms=[], coverage=1):
+    def get_splices(self, chrom='', chroms=[], tags=[], coverage=1):
         """Retrieve a raw list of splices from the SpliceDB"""
         conn = self.get_connection()
         c = conn.cursor()
@@ -380,6 +380,14 @@ class SpliceDB():
                 data.append(chrom)
 
             conditions.append("(" + " OR ".join(chrom_condition) + ")")
+        if len(tags) > 0:
+            tags_cond = "tag=?"
+            tag_condition = []
+            for tag in tags:
+                tag_condition.append(tags_cond)
+                data.append(tag)
+
+            conditions.append("(" + " OR ".join(tag_condition) + ")")
         if coverage > 1:
             conditions.append("coverage>=?")
             data.append(coverage)
