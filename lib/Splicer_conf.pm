@@ -187,9 +187,25 @@ sub pipeline_analyses {
       -meadow_type       => 'LSF',
       -rc_name    => 'bigmem',
       -flow_into  => {
-        '2' => '?accu_name=splice_dbs&accu_address={species}[]&accu_input_variable=splice_db',
+        '1' => '?accu_name=splice_dbs&accu_address={species}[]&accu_input_variable=splice_db',
       }   
     },
+    
+#    {
+#      -logic_name        => 'Extract_splices',
+#      -module            => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
+#      -parameters        => {
+#        'cmd' => 'python3 ~/src/rnaseq/splices/splice2/lib/ExtractSplices.py #bam_file# #splice_db#',
+#      },
+#      -analysis_capacity => 30,
+#      -max_retry_count => 0,
+#      -meadow_type       => 'LSF',
+#      -rc_name    => 'bigmem',
+#      -flow_into  => {
+#        '1' => '?accu_name=splice_dbs&accu_address={species}[]&accu_input_variable=splice_db',
+#      }   
+#    },
+
  
     {
       -logic_name => 'Merge_splices',
