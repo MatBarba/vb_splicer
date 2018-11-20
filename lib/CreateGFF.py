@@ -19,6 +19,7 @@ class CreateGFF(eHive.BaseRunnable):
         }
 
     def run(self):
+        logging.basicConfig(level=logging.DEBUG)
 
         species = self.param_required('species')
         gff_dir = self.param_required('gff_dir')
@@ -36,7 +37,8 @@ class CreateGFF(eHive.BaseRunnable):
             'startends': gff_basename + '_startends.gff',
             'inbridge': gff_basename + '_inbridge.gff',
             'outbridge': gff_basename + '_outbridge.gff',
-            'nocontact': gff_basename + '_noncontact.gff',
+            'ingene': gff_basename + '_ingene.gff',
+            'nocontact': gff_basename + '_nocontact.gff',
         }
 
         # Run it!
@@ -53,21 +55,31 @@ class CreateGFF(eHive.BaseRunnable):
             "Import coverage filtered splices (coverage >= %d)" % coverage)
         input_db = SpliceDB(input)
 
-        whole_collection = input_db.get_collection()
-        if 'all' in outputs and outputs['all'] is not None:
-            CreateGFF.print_gff(whole_collection, outputs['all'])
+        logging.info("Loade genes coverage")
+        genes = input_db.get_genes_coverage()
 
         groups = {
+            "all": [],
             "known": ["known"],
             "inbridge": ["inbridge"],
             "outbridge": ["outbridge"],
             "startends": ["left", "right"],
+            "ingene": ["ingene"],
             "nocontact": ["nocontact"],
         }
         for group, tags in groups.items():
             if group in outputs and outputs[group] is not None:
                 logging.info("Writing group " + group)
-                collection = input_db.get_collection(tags=tags)
+                filter_genes = {}
+                if group in ("startends", "ingene"):
+                    filter_genes = genes
+                if group in ("nocontact"):
+                    filter_coverage = coverage
+                collection = input_db.get_collection(
+                        tags=tags,
+                        genes=filter_genes,
+                        coverage=coverage
+                        )
                 CreateGFF.print_gff(collection, outputs[group])
 
     def print_gff(collection, output):

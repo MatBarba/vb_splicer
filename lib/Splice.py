@@ -213,9 +213,18 @@ class Splice():
     def set_gene(self, gene):
         self.gene = gene
 
+    def is_in_gene(self, genes):
+        for gene in genes:
+            left = self.start - self.left_flank
+            right = self.end + self.right_flank
+            if (self.chrom == gene.chrom
+                    and (left >= gene.start and left <= gene.end
+                    or right >= gene.start and right <= gene.end)):
+                return gene.id
+
 
 class SpliceCollection():
-    """Collection of splices"""
+    """Cllection of splices"""
 
     def __init__(self, splices=[]):
         self.splices = []
@@ -296,6 +305,34 @@ class SpliceCollection():
             for i in indexes:
                 splices.append(self.splices[i])
         return splices
+    
+    def filter_by_gene_coverage(splices, genes, coverage=1):
+        acceptable_ratio = 0.5
+
+        if len(genes) == 0:
+            return splices
+
+        new_splices = []
+
+        print("Filtering %d splices" % len(splices))
+
+        for splice in splices:
+            if splice.gene is not None:
+                if splice.gene in genes:
+                    vals = genes[splice.gene]
+
+                    # Compare min gene value and this splice coverage
+                    if splice.coverage > vals['min'] * acceptable_ratio:
+                        new_splices.append(splice)
+                else:
+                    # This case means that there is no intron in the current gene model
+                    # We want to keep the splices that are in those genes in case there should be
+                    # introns in their place
+                    if splice.coverage >= coverage:
+                        new_splices.append(splice)
+        print("Filtering result: %d splices" % len(new_splices))
+
+        return new_splices
 
 
 class SpliceDB():
@@ -350,10 +387,12 @@ class SpliceDB():
             c.execute(sql, values)
         conn.commit()
 
-    def get_collection(self, chrom='', chroms=[], tags=[], coverage=1):
+    def get_collection(self, chrom='', chroms=[], tags=[], coverage=1, genes={}):
         """Retrieve a SpliceCollection from the SpliceDB"""
 
         splices = self.get_splices(chrom, chroms, tags, coverage)
+
+        splices = SpliceCollection.filter_by_gene_coverage(splices, genes, coverage)
 
         col = SpliceCollection(splices)
 
@@ -423,11 +462,21 @@ class SpliceDB():
 
         return splices
 
+    def detag(self):
+        conn = self.get_connection()
+        c = conn.cursor()
+
+        c.execute('''UPDATE splices set tag=NULL, gene=NULL''')
+
     def tag_back(self, collection):
         """Apply the tags of splices back to database"""
         conn = self.get_connection()
 
-        for splice in collection.get_splices():
+        n = 1
+        splices = collection.get_splices()
+        for splice in splices:
+#            logging.info("%d/%d %s" % (n, len(splices), str(splice).rstrip()))
+            n += 1
             self.tag_splice(splice, conn.cursor())
         conn.commit()
 
@@ -440,3 +489,37 @@ class SpliceDB():
         logging.debug(values)
         cursor.execute(sql, values)
 
+    def get_genes_coverage(self):
+        """Retrieve the splice coverage for all genes"""
+
+        conn = self.get_connection()
+        c = conn.cursor()
+
+        sql = 'SELECT gene, count(*), min(coverage), sum(coverage) FROM splices WHERE tag="known" group by gene'
+        c.execute(sql)
+
+        genes = {}
+        for row in c.fetchall():
+            (gene, count, min_cov, sum_cov) = row
+            genes[gene] = {
+                    'min': min_cov,
+                    'sum': sum_cov,
+                    'count': count
+                    }
+
+        return genes
+
+    def get_chroms(self):
+        sql = "SELECT chrom, count(*) FROM splices group by chrom"
+        conn = self.get_connection()
+        c = conn.cursor()
+        c.execute(sql)
+
+        chroms = {}
+        for row in c.fetchall():
+            chrom, num = row[0], row[1]
+            if chrom not in chroms:
+                chroms[chrom] = num
+            else:
+                chroms[chrom] += num
+        return chroms

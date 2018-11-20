@@ -17,6 +17,10 @@ class Tagger(eHive.BaseRunnable):
 
         splice_db = self.param_required('splice_db')
         gtf_file = self.param_required('gtf_file')
+        do_not_retag = self.param('do_not_retag')
+
+        if do_not_retag:
+            return
 
         if gtf_file is None:
             logging.warn("No GTF file, abort")
@@ -27,14 +31,12 @@ class Tagger(eHive.BaseRunnable):
 
     def tag_splices(input, gtf_path):
         input_db = SpliceDB(input)
-        collection = input_db.get_collection()
+        input_db.detag()
 
-        if collection.size == 0:
-            logging.warn("No splices, abort")
-            return
-        
         # Get data from the GTF
-        introns = Tagger.get_introns(gtf_path)
+        logging.info("Get introns from GTF")
+        genes = Tagger.get_genes(gtf_path)
+        introns = Tagger.get_introns(genes)
 
         stats = {
             'known': 0,
@@ -42,52 +44,71 @@ class Tagger(eHive.BaseRunnable):
             'outbridge': 0,
             'left': 0,
             'right': 0,
+            'ingene': 0,
             'nocontact': 0
         }
 
-        # Compare all the splices with the introns
-        for splice in collection.get_splices():
-            left_ok = introns.left_is_known(splice)
-            right_ok = introns.right_is_known(splice)
-            lefts = introns.get_left_splices(splice)
-            rights = introns.get_right_splices(splice)
+        logging.info("Get chroms from db")
+        chroms = input_db.get_chroms()
+        
+        nc = 0
+        for chrom in chroms.keys():
+            logging.info("%d/%d Tag chrom %s" % (nc, len(chroms), chrom))
+            collection = input_db.get_collection(chroms=[chrom])
 
-            if introns.is_known(splice):
-                same = introns.get_same_splice(splice)
+            # Compare all the splices with the introns
+            splices = collection.get_splices()
+            logging.info("\t%d splices to tag" % len(splices))
+            nc += 1
+            for splice in splices:
+                left_ok = introns.left_is_known(splice)
+                right_ok = introns.right_is_known(splice)
+                lefts = introns.get_left_splices(splice)
+                rights = introns.get_right_splices(splice)
 
-                stats['known'] += 1
-                splice.set_tag('known')
-                splice.set_gene(same.gene)
-            elif left_ok and right_ok:
-                if lefts[0].gene == rights[0].gene:
-                    stats['inbridge'] += 1
-                    splice.set_tag('inbridge')
+                if introns.is_known(splice):
+                    same = introns.get_same_splice(splice)
+
+                    stats['known'] += 1
+                    splice.set_tag('known')
+                    splice.set_gene(same.gene)
+                elif left_ok and right_ok:
+                    if lefts[0].gene == rights[0].gene:
+                        stats['inbridge'] += 1
+                        splice.set_tag('inbridge')
+                        splice.set_gene(lefts[0].gene)
+                    else:
+                        stats['outbridge'] += 1
+                        splice.set_tag('outbridge')
+
+                elif left_ok:
+                    stats['left'] += 1
+                    splice.set_tag('left')
                     splice.set_gene(lefts[0].gene)
+                elif right_ok:
+                    stats['right'] += 1
+                    splice.set_tag('right')
+                    splice.set_gene(rights[0].gene)
                 else:
-                    stats['outbridge'] += 1
-                    splice.set_tag('outbridge')
+                    gene = splice.is_in_gene(genes)
 
-            elif left_ok:
-                stats['left'] += 1
-                splice.set_tag('left')
-                splice.set_gene(lefts[0].gene)
-            elif right_ok:
-                stats['right'] += 1
-                splice.set_tag('right')
-                splice.set_gene(rights[0].gene)
-            else:
-                stats['nocontact'] += 1
-                splice.set_tag('nocontact')
+                    if gene is not None:
+                        splice.set_gene(gene)
+                        stats['ingene'] += 1
+                        splice.set_tag('ingene')
+                    else:
+                        stats['nocontact'] += 1
+                        splice.set_tag('nocontact')
+
+            # Store the tags back in the database
+            input_db.tag_back(collection)
 
         logging.info("Splices filter stats:")
         for stat, num in stats.items():
             logging.info("%s : %d" % (stat, num))
 
-        # Store the tags back in the database
-        input_db.tag_back(collection)
 
-    def get_introns(gtf_path):
-        genes = Tagger.get_genes(gtf_path)
+    def get_introns(genes):
 
         # Find known introns
         col = SpliceCollection()

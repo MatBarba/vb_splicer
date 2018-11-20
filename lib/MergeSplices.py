@@ -16,6 +16,7 @@ class MergeSplices(eHive.BaseRunnable):
     def run(self):
 
         logging.basicConfig(level=logging.INFO)
+        #logging.basicConfig(level=logging.DEBUG)
 
         splice_dir = self.param_required('splice_dir')
         species = self.param_required('species')
@@ -51,12 +52,12 @@ class MergeSplices(eHive.BaseRunnable):
         logging.info("Created output db %s" % output_db)
 
         # First, get the list of chroms from all dbs
-        chroms = get_chroms(input_dbs)
+        chroms = MergeSplices.get_chroms(input_dbs)
         logging.info("Total chroms: %d" % len(chroms.keys()))
 
         # If we have a lot of (small) chroms, iterating over every one of them
         # is not efficient so we can group all the small ones
-        chrom_groups = group_chroms(chroms)
+        chrom_groups = MergeSplices.group_chroms(chroms)
         logging.info("%d chrom groups to merge" % len(chrom_groups))
 
         size = 0
@@ -65,11 +66,14 @@ class MergeSplices(eHive.BaseRunnable):
         dbs = {}
         for chrom_group in sorted(chrom_groups):
             logging.info(
-                "%d Merging of %d groups (%s)"
-                % (n, len(chrom_group), chrom_group[0]))
+                "%d/%d Merging group of size %d (%s...)"
+                % (n, len(chrom_groups), len(chrom_group), chrom_group[0]))
             col = SpliceCollection()
+
+            ndb = 1
             for input_db in input_dbs:
-                logging.debug("Merge db %s" % input_db)
+                logging.info("%d/%d\t%d/%d\tMerge db %s" % (n, len(chrom_groups), ndb, len(input_dbs), input_db))
+                ndb += 1
 
                 if input_db not in dbs:
                     dbs[input_db] = SpliceDB(input_db)
@@ -83,50 +87,46 @@ class MergeSplices(eHive.BaseRunnable):
             size += col.size
             n += 1
 
+    def group_chroms(chroms):
 
-def group_chroms(chroms):
+        group_threshold = 50000
 
-    group_threshold = 50000
+        small_groups = []
+        groups = []
+        small_groups_size = 0
 
-    small_groups = []
-    groups = []
-    small_groups_size = 0
-
-    for chrom, num in chroms.items():
-        if num > group_threshold:
-            groups.append([chrom])
-        else:
-            small_groups.append(chrom)
-            small_groups_size += num
-
-            if small_groups_size >= group_threshold or len(small_groups) >= 500:
-                groups.append(small_groups)
-                small_groups = []
-                small_groups_size = 0
-
-    if len(small_groups) > 0:
-        groups.append(small_groups)
-
-    return groups
-
-
-def get_chroms(dbs):
-
-    chroms = {}
-    for db in dbs:
-        sql = "SELECT chrom, count(*) FROM splices group by chrom"
-        conn = sqlite3.connect(db)
-        c = conn.cursor()
-        c.execute(sql)
-
-        for row in c.fetchall():
-            chrom, num = row[0], row[1]
-            if chrom not in chroms:
-                chroms[chrom] = num
+        for chrom, num in chroms.items():
+            if num > group_threshold:
+                groups.append([chrom])
             else:
-                chroms[chrom] += num
+                small_groups.append(chrom)
+                small_groups_size += num
 
-    return chroms
+                if small_groups_size >= group_threshold or len(small_groups) >= 500:
+                    groups.append(small_groups)
+                    small_groups = []
+                    small_groups_size = 0
+
+        if len(small_groups) > 0:
+            groups.append(small_groups)
+
+        return groups
+
+
+    def get_chroms(dbs):
+
+        chroms = {}
+        for db in dbs:
+            indb = inputDB(db)
+            db_chroms = indb.get_chroms()
+            
+            for chrom, num in db_chroms.items():
+                if chrom not in chroms:
+                    chroms[chrom] = num
+                else:
+                    chroms[chrom] += num
+
+        return chroms
 
 
 if __name__ == "__main__":

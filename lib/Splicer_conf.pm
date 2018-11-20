@@ -38,6 +38,7 @@ sub default_options {
     force_gtf => 0,
     force_splice_db => 0,
     force_merge => 0,
+    do_not_retag => 0,
     coverage => 1,
 
     debug => 0,
@@ -51,7 +52,6 @@ sub hive_meta_table {
     'hive_use_param_stack'  => 1,           # switch on the new param_stack mechanism
   };
 }
-
 
 sub pipeline_analyses {
   my ($self) = @_;
@@ -228,6 +228,9 @@ sub pipeline_analyses {
       -logic_name => 'Tagger',
       -module     => 'Tagger',
       -language   => 'python3',
+      -parameters        => {
+        do_not_retag => $self->o('do_not_retag'),
+      },
       -analysis_capacity => 20,
       -max_retry_count => 0,
       -rc_name    => 'bigmem',
@@ -247,7 +250,7 @@ sub pipeline_analyses {
       },
       -analysis_capacity => 10,
       -max_retry_count => 0,
-      -rc_name    => 'biggermem',
+      -rc_name    => 'bigmem',
       -meadow_type       => 'LSF',
       -flow_into  => {
         '2' => '?accu_name=gffs&accu_address={species}[]&accu_input_variable=gff',
@@ -275,6 +278,7 @@ sub pipeline_analyses {
 }
 
 sub resource_classes {
+
   my ($self) = @_;
   
   my $reg_requirement = '--reg_conf ' . $self->o('reg_conf');
