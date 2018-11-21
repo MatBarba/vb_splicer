@@ -71,14 +71,19 @@ class CreateGFF(eHive.BaseRunnable):
             if group in outputs and outputs[group] is not None:
                 logging.info("Writing group " + group)
                 filter_genes = {}
+                filter_coverage = 1
+                nointron_coverage = 1
                 if group in ("startends", "ingene"):
                     filter_genes = genes
+                if group in ("ingene"):
+                    nointron_coverage = coverage
                 if group in ("nocontact"):
                     filter_coverage = coverage
                 collection = input_db.get_collection(
                         tags=tags,
                         genes=filter_genes,
-                        coverage=coverage
+                        coverage=filter_coverage,
+                        nointron_coverage=nointron_coverage
                         )
                 CreateGFF.print_gff(collection, outputs[group])
 

@@ -11,6 +11,121 @@ import sqlite3
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, FeatureLocation
+import statistics
+
+class SpliceGene():
+    """A simple gene representation for the spliceDB"""
+
+    sql_fields = ('gene', 'chrom', 'start', 'end', 'strand',
+                  'introns', 'covered_introns', 'splice_coverage')
+
+    def __init__(self, gene, chrom, start, end, strand='.',
+                 introns=0, covered_introns=0, splice_coverage=0):
+        self.gene = gene
+        self.chrom = chrom
+        self.start = start
+        self.end = end
+        self.strand = strand
+        self.introns = introns
+        self.covered_introns = covered_introns
+        self.splice_coverage = splice_coverage
+        self.key = gene
+        self.min_coverage = 10
+        self.coverages = []
+
+    def sql_values(self):
+        return [getattr(self, f) for f in self.sql_fields]
+
+    def sql_placeholder(self):
+        return ",".join(['?' for f in self.sql_fields])
+    
+    def add_known_intron(self, coverage):
+        self.covered_introns += 1
+
+        if self.covered_introns > self.introns:
+            logging.warning("There are more covered introns (%d) than known introns (%d) in %s" % (self.covered_introns, self.introns, self.gene))
+
+        cov = self.splice_coverage
+
+        self.coverages.append(coverage)
+
+        if cov == 0:
+            self.splice_coverage = coverage
+        else:
+            self.splice_coverage = ((cov - 1) * self.covered_introns + coverage) / cov
+
+    def compute_splice_coverage(self):
+        mean = statistics.mean(self.coverage)
+        
+        # Is there any outrageous outliers?
+        # I.e. with a very weak coverage and way below the mean and the others?
+        # Check median
+
+class SpliceGeneCollection():
+    """Collection of splice genes"""
+
+    def __init__(self, genes=[]):
+        self.genes = []
+        self.keys = {}
+        self.size = 0
+        self.add_genes(genes)
+
+    def add_genes(self, genes):
+        for gene in genes:
+            self.add_gene(gene)
+
+    def add_gene(self, gene):
+        if self.is_known(gene):
+            return
+
+        else:
+            # We're going to add 1 gene, use the previous size for the index
+            i = self.size
+
+            self.genes.append(gene)
+            self.keys[gene.key] = i
+
+            # Increment size only at the end
+            self.size += 1
+
+    def get_genes(self):
+        return self.genes
+
+    def get_gene(self, key):
+        if key in self.keys:
+            return self.genes[self.keys[key]]
+
+    def is_known(self, gene):
+        return gene.key in self.keys
+
+    def from_GTF_genes(gtf_genes):
+        splice_genes = []
+        for ggene in gtf_genes:
+            all_introns = {}
+            for tr in ggene.transcripts:
+                exons = tr.exons
+                if len(exons) > 1:
+                    for i, exon in enumerate(exons):
+                        if i > 0:
+                            intron = str(exons[i-1].start) + str(exons[i-1].end) + "-" + str(exons[i].start) + str(exons[i].end)
+                            all_introns[intron] = 1
+
+            splice_gene = SpliceGene(
+                    ggene.id,
+                    ggene.chrom,
+                    ggene.start,
+                    ggene.end,
+                    ggene.strand,
+                    introns=len(all_introns)
+                    )
+            splice_genes.append(splice_gene)
+        sg_collection = SpliceGeneCollection()
+        sg_collection.add_genes(splice_genes)
+        return sg_collection
+
+    def add_known_intron(self, gene_id, coverage):
+        gene = self.get_gene(gene_id)
+        gene.add_known_intron(coverage)
 
 
 class Splice():
@@ -325,7 +440,7 @@ class SpliceCollection():
                     if splice.coverage > vals['min'] * acceptable_ratio:
                         new_splices.append(splice)
                 else:
-                    # This case means that there is no intron in the current gene model
+                    # This case covered_means that there is no intron in the current gene model
                     # We want to keep the splices that are in those genes in case there should be
                     # introns in their place
                     if splice.coverage >= coverage:
@@ -333,6 +448,7 @@ class SpliceCollection():
         print("Filtering result: %d splices" % len(new_splices))
 
         return new_splices
+
 
 
 class SpliceDB():
@@ -371,6 +487,70 @@ class SpliceDB():
                 )''')
         c.execute('''CREATE INDEX chrom_idx ON splices (chrom);''')
         c.execute('''CREATE INDEX tag_idx ON splices (tag);''')
+        c.execute('''CREATE INDEX coverage_idx ON splices (coverage);''')
+        c.execute('''CREATE INDEX splices_gene_idx ON splices (gene);''')
+
+        c.execute('''CREATE TABLE genes (
+                    gene text,
+                    chrom text,
+                    start int,
+                    end int,
+                    strand text,
+                    introns int,
+                    covered_introns int,
+                    splice_coverage float
+                )''')
+        c.execute('''CREATE INDEX genes_gene_idx ON genes (gene);''')
+
+    def add_genes(self, genes):
+        """Store a list of genes in the SpliceDB"""
+
+        conn = self.get_connection()
+        c = conn.cursor()
+        for gene in genes:
+            values = gene.sql_values()
+            fields = ",".join(gene.sql_fields)
+            placeholder = gene.sql_placeholder()
+            sql = "INSERT INTO genes("+fields+") VALUES("+placeholder+")"
+            logging.debug(sql)
+            logging.debug(values)
+            c.execute(sql, values)
+        conn.commit()
+
+    def get_genes(self):
+        """Retrieve a list of genes from the SpliceDB"""
+        conn = self.get_connection()
+        c = conn.cursor()
+
+        get_fields = list(SpliceGene.sql_fields)
+        get_fields.append('ROWID')
+
+        data = []
+        sql = "SELECT " + ",".join(get_fields) + " FROM genes"
+        sql += " ORDER BY chrom, start, end, strand"
+
+        logging.debug(sql)
+        c.execute(sql, data)
+
+        genes = []
+        for row in c.fetchall():
+            g = {}
+            for i, val in enumerate(row):
+                field = get_fields[i]
+                s[field] = val
+            gene = SpliceGene(
+                s['gene'],
+                s['chrom'],
+                s['start'],
+                s['end'],
+                s['strand'],
+                s['introns'],
+                s['covered_introns'],
+                s['splice_coverage'],
+            )
+            genes.append(gene)
+
+        return genes
 
     def add_collection(self, collection):
         """Store all the Splices from a SpliceCollection in the SpliceDB"""
@@ -387,10 +567,10 @@ class SpliceDB():
             c.execute(sql, values)
         conn.commit()
 
-    def get_collection(self, chrom='', chroms=[], tags=[], coverage=1, genes={}):
+    def get_collection(self, chrom='', chroms=[], tags=[], coverage=1, nointron_coverage=1, genes={}):
         """Retrieve a SpliceCollection from the SpliceDB"""
 
-        splices = self.get_splices(chrom, chroms, tags, coverage)
+        splices = self.get_splices(chrom, chroms, tags, coverage, nointron_coverage)
 
         splices = SpliceCollection.filter_by_gene_coverage(splices, genes, coverage)
 
@@ -398,22 +578,24 @@ class SpliceDB():
 
         return col
 
-    def get_splices(self, chrom='', chroms=[], tags=[], coverage=1):
+    def get_splices(self, chrom='', chroms=[], tags=[], coverage=1, nointron_coverage=1):
         """Retrieve a raw list of splices from the SpliceDB"""
         conn = self.get_connection()
         c = conn.cursor()
 
         get_fields = list(Splice.sql_fields)
         get_fields.append('ROWID')
+        select_fields = map(lambda x: "s." + x, get_fields)
 
-        sql = "SELECT " + ",".join(get_fields) + " FROM splices"
+        sql = "SELECT " + ", ".join(select_fields) + " FROM splices s"
         conditions = []
         data = []
+        left_join = ''
         if chrom != '':
-            conditions.append("chrom=?")
+            conditions.append("s.chrom=?")
             data.append(chrom)
         if len(chroms) > 0:
-            chroms_cond = "chrom=?"
+            chroms_cond = "s.chrom=?"
             chrom_condition = []
             for chrom in chroms:
                 chrom_condition.append(chroms_cond)
@@ -429,13 +611,20 @@ class SpliceDB():
 
             conditions.append("(" + " OR ".join(tag_condition) + ")")
         if coverage > 1:
-            conditions.append("coverage>=?")
+            conditions.append("s.coverage>=?")
             data.append(coverage)
+        if nointron_coverage > 1:
+            left_join = "LEFT JOIN genes g USING(gene)"
+            conditions.append("(g.covered_introns > 0 OR s.coverage > ?)")
+            data.append(nointron_coverage)
+
+        if left_join != '':
+            sql += " " + left_join + " "
 
         if len(conditions) > 0:
             sql += " WHERE " + " AND ".join(conditions)
 
-        sql += " ORDER BY chrom, start, end, strand"
+        sql += " ORDER BY s.chrom, s.start, s.end, s.strand"
 
         logging.debug(sql)
         c.execute(sql, data)
@@ -488,6 +677,22 @@ class SpliceDB():
         logging.debug(sql)
         logging.debug(values)
         cursor.execute(sql, values)
+
+    def add_genes_collection(self, sg_collection):
+        """Store the genes collection in the database"""
+        conn = self.get_connection()
+        c = conn.cursor()
+        c.execute('''DELETE FROM genes''')
+
+        for gene in sg_collection.get_genes():
+            values = gene.sql_values()
+            fields = ",".join(gene.sql_fields)
+            placeholder = gene.sql_placeholder()
+            sql = "INSERT INTO genes("+fields+") VALUES("+placeholder+")"
+            logging.debug(sql)
+            logging.debug(values)
+            c.execute(sql, values)
+        conn.commit()
 
     def get_genes_coverage(self):
         """Retrieve the splice coverage for all genes"""

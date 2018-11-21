@@ -3,7 +3,7 @@
 import argparse
 import logging
 
-from Splice import Splice, SpliceCollection, SpliceDB
+from Splice import Splice, SpliceCollection, SpliceDB, SpliceGeneCollection
 from SimpleGTF import SimpleGTF
 from BCBio import GFF
 
@@ -37,6 +37,7 @@ class Tagger(eHive.BaseRunnable):
         logging.info("Get introns from GTF")
         genes = Tagger.get_genes(gtf_path)
         introns = Tagger.get_introns(genes)
+        sg_collection = SpliceGeneCollection.from_GTF_genes(genes)
 
         stats = {
             'known': 0,
@@ -72,6 +73,8 @@ class Tagger(eHive.BaseRunnable):
                     stats['known'] += 1
                     splice.set_tag('known')
                     splice.set_gene(same.gene)
+                    sg_collection.add_known_intron(same.gene, splice.coverage)
+
                 elif left_ok and right_ok:
                     if lefts[0].gene == rights[0].gene:
                         stats['inbridge'] += 1
@@ -102,6 +105,8 @@ class Tagger(eHive.BaseRunnable):
 
             # Store the tags back in the database
             input_db.tag_back(collection)
+
+        input_db.add_genes_collection(sg_collection)
 
         logging.info("Splices filter stats:")
         for stat, num in stats.items():
