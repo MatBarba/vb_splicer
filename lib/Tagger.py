@@ -6,6 +6,7 @@ import logging
 from Splice import Splice, SpliceCollection, SpliceDB, SpliceGeneCollection
 from SimpleGTF import SimpleGTF
 from BCBio import GFF
+from bx.intervals.intersection import Interval, IntervalTree
 
 import eHive
 import os
@@ -36,6 +37,7 @@ class Tagger(eHive.BaseRunnable):
         # Get data from the GTF
         logging.info("Get introns from GTF")
         genes = Tagger.get_genes(gtf_path)
+        genes_intervals = Tagger.make_gene_interval_tree(genes)
         introns = Tagger.get_introns(genes)
         sg_collection = SpliceGeneCollection.from_GTF_genes(genes)
 
@@ -46,6 +48,7 @@ class Tagger(eHive.BaseRunnable):
             'left': 0,
             'right': 0,
             'ingene': 0,
+            'outgene': 0,
             'nocontact': 0
         }
 
@@ -93,12 +96,16 @@ class Tagger(eHive.BaseRunnable):
                     splice.set_tag('right')
                     splice.set_gene(rights[0].gene)
                 else:
-                    gene = splice.is_in_gene(genes)
+                    overlap, gene = splice.gene_overlap(genes_intervals)
 
-                    if gene is not None:
-                        splice.set_gene(gene)
+                    if overlap == 'in':
+                        splice.set_gene(gene.id)
                         stats['ingene'] += 1
                         splice.set_tag('ingene')
+                    elif overlap == 'out':
+                        splice.set_gene(gene.id)
+                        stats['outgene'] += 1
+                        splice.set_tag('outgene')
                     else:
                         stats['nocontact'] += 1
                         splice.set_tag('nocontact')
@@ -111,6 +118,17 @@ class Tagger(eHive.BaseRunnable):
         logging.info("Splices filter stats:")
         for stat, num in stats.items():
             logging.info("%s : %d" % (stat, num))
+
+    def make_gene_interval_tree(genes):
+        intervals = {}
+
+        for gene in genes:
+            if not gene.chrom in intervals:
+                intervals[gene.chrom] = IntervalTree()
+
+            intervals[gene.chrom].insert(gene.start, gene.end, gene)
+
+        return intervals
 
 
     def get_introns(genes):

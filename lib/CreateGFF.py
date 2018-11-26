@@ -38,6 +38,7 @@ class CreateGFF(eHive.BaseRunnable):
             'inbridge': gff_basename + '_inbridge.gff',
             'outbridge': gff_basename + '_outbridge.gff',
             'ingene': gff_basename + '_ingene.gff',
+            'outgene': gff_basename + '_outgene.gff',
             'nocontact': gff_basename + '_nocontact.gff',
         }
 
@@ -65,6 +66,7 @@ class CreateGFF(eHive.BaseRunnable):
             "outbridge": ["outbridge"],
             "startends": ["left", "right"],
             "ingene": ["ingene"],
+            "outgene": ["outgene"],
             "nocontact": ["nocontact"],
         }
         for group, tags in groups.items():
@@ -73,9 +75,9 @@ class CreateGFF(eHive.BaseRunnable):
                 filter_genes = {}
                 filter_coverage = 1
                 nointron_coverage = 1
-                if group in ("startends", "ingene"):
+                if group in ("startends", "ingene", "outgene"):
                     filter_genes = genes
-                if group in ("ingene"):
+                if group in ("ingene", "outgene"):
                     nointron_coverage = coverage
                 if group in ("nocontact"):
                     filter_coverage = coverage

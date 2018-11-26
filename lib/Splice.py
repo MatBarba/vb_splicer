@@ -107,7 +107,11 @@ class SpliceGeneCollection():
                 if len(exons) > 1:
                     for i, exon in enumerate(exons):
                         if i > 0:
-                            intron = str(exons[i-1].start) + str(exons[i-1].end) + "-" + str(exons[i].start) + str(exons[i].end)
+                            intron = ""
+                            if ggene.strand == '-':
+                                intron = "%d-%d" % (exons[i-1].start, exons[i].end)
+                            else:
+                                intron = "%d-%d" % (exons[i-1].end, exons[i].start)
                             all_introns[intron] = 1
 
             splice_gene = SpliceGene(
@@ -329,14 +333,62 @@ class Splice():
         self.gene = gene
 
     def is_in_gene(self, genes):
+        """If the splice is completely within a gene"""
         for gene in genes:
             left = self.start - self.left_flank
             right = self.end + self.right_flank
             if (self.chrom == gene.chrom
                     and (left >= gene.start and left <= gene.end
-                    or right >= gene.start and right <= gene.end)):
+                    and right >= gene.start and right <= gene.end)):
                 return gene.id
 
+    def is_out_gene(self, genes):
+        """If the splice is only partially within a gene"""
+
+        for gene in genes:
+            left = self.start - self.left_flank
+            right = self.end + self.right_flank
+
+            left_included = (left >= gene.start and left <= gene.end)
+            right_included = (right >= gene.start and right <= gene.end)
+            if (self.chrom == gene.chrom and (left_included ^ right_included)):
+                return gene.id
+
+    def gene_overlap(self, genes_intervals):
+        if self.chrom in genes_intervals:
+            intersecter = genes_intervals[self.chrom]
+            genes = intersecter.find(self.start, self.end)
+
+            if len(genes) > 0:
+                # Just one gene? Take the first one
+                gene = genes[0]
+
+                left_included = (self.start >= gene.start and self.start <= gene.end)
+                right_included = (self.end >= gene.start and self.end <= gene.end)
+                if left_included and right_included:
+                    return 'in', gene
+                else:
+                    return 'out', gene
+
+            else:
+                return 'no', None
+        else:
+            return 'no', None
+
+        for gene in genes:
+            left = self.start - self.left_flank
+            right = self.end + self.right_flank
+
+            left_included = (left >= gene.start and left <= gene.end)
+            right_included = (right >= gene.start and right <= gene.end)
+            if self.chrom == gene.chrom:
+                if left_included ^ right_included:
+                    return 'out', gene.id
+                elif left_included and right_included:
+                    return 'in', gene.id
+
+        return 'no', None
+        
 
 class SpliceCollection():
     """Cllection of splices"""
@@ -448,7 +500,6 @@ class SpliceCollection():
         print("Filtering result: %d splices" % len(new_splices))
 
         return new_splices
-
 
 
 class SpliceDB():
@@ -613,6 +664,7 @@ class SpliceDB():
         if coverage > 1:
             conditions.append("s.coverage>=?")
             data.append(coverage)
+
         if nointron_coverage > 1:
             left_join = "LEFT JOIN genes g USING(gene)"
             conditions.append("(g.covered_introns > 0 OR s.coverage > ?)")
@@ -728,3 +780,11 @@ class SpliceDB():
             else:
                 chroms[chrom] += num
         return chroms
+
+    def query_count(self, sql):
+        conn = self.get_connection()
+        c = conn.cursor()
+        c.execute(sql)
+
+        for row in c.fetchall():
+            return row[0]

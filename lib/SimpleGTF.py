@@ -75,7 +75,8 @@ class SimpleGTF():
                                             chrom, start, end, strand)
                 cur_gene.add_transcript(cur_transcript)
             elif type == 'exon':
-                cur_exon = Exon(names['exon_number'],
+                exon_name = "%s_%d-%d_%s" % (chrom, start, end, strand)
+                cur_exon = Exon(exon_name,
                                 chrom, start, end, strand)
                 cur_transcript.add_exon(cur_exon)
 
