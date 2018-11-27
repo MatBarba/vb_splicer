@@ -12,6 +12,7 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, FeatureLocation
 from statistics import mean
+from bx.intervals.intersection import IntervalTree
 
 class SpliceGene():
     """A simple gene representation for the spliceDB"""
@@ -606,6 +607,42 @@ class SpliceCollection():
         print("Filtering result: %d splices" % len(new_splices))
 
         return new_splices
+
+    def filter_by_overlap(self):
+        groups = {}
+        itrees = {}
+        
+        logging.info("Filtering by overlap from %s splices" % len(self.splices))
+
+        for splice in self.splices:
+            if splice.chrom not in itrees:
+                itrees[splice.chrom] = IntervalTree()
+            itree = itrees[splice.chrom]
+            overlaps = itree.find(splice.start, splice.end)
+            
+            # Define the group
+            if len(overlaps) > 0:
+                group = overlaps[0][1]
+            else:
+                group = splice
+                groups[group] = []
+
+            groups[group].append(splice)
+            itree.insert(splice.start, splice.end, [splice, group])
+        
+        final_splices = []
+        for group in groups.values():
+            mean_coverage = mean(map(lambda x: x.coverage, group))
+
+            # Only keep those that are above the mean/2 (let's be generous)
+            for splice in group:
+                if splice.coverage >= mean_coverage/2:
+                    final_splices.append(splice)
+
+        logging.info("After filtering: %s splices" % len(final_splices))
+
+        # Replace the current collection
+        self.__init__(final_splices)
 
 
 class SpliceDB():

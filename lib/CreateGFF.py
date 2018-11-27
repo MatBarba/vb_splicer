@@ -87,6 +87,8 @@ class CreateGFF(eHive.BaseRunnable):
                         coverage=filter_coverage,
                         nointron_coverage=nointron_coverage
                         )
+                if group in ("nocontact", "ingene", "outgene"):
+                    collection.filter_by_overlap()
                 CreateGFF.print_gff(collection, outputs[group])
 
     def print_gff(collection, output):
