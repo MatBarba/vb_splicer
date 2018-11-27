@@ -117,7 +117,7 @@ class MergeSplices(eHive.BaseRunnable):
 
         chroms = {}
         for db in dbs:
-            indb = inputDB(db)
+            indb = SpliceDB(db)
             db_chroms = indb.get_chroms()
             
             for chrom, num in db_chroms.items():
