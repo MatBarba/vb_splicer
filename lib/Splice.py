@@ -11,7 +11,7 @@ import sqlite3
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from Bio.SeqFeature import SeqFeature, FeatureLocation
-import statistics
+from statistics import mean
 
 class SpliceGene():
     """A simple gene representation for the spliceDB"""
@@ -40,26 +40,52 @@ class SpliceGene():
         return ",".join(['?' for f in self.sql_fields])
     
     def add_known_intron(self, coverage):
+
+        # One more intron covered for this gene
+        self.covered_introns += 1
+        if self.covered_introns > self.introns:
+            logging.warning("There are more covered introns (%d) than known introns (%d) in %s" % (self.covered_introns, self.introns, self.gene))
+
+        self.coverages.append(coverage)
+        self.splice_coverage = mean(self.coverages)
+
+
+class SpliceTranscript():
+    """A simple transcript representation for the spliceDB"""
+
+    sql_fields = ('transcript', 'gene', 'chrom', 'start', 'end', 'strand',
+                  'introns', 'covered_introns', 'splice_coverage')
+
+    def __init__(self, transcript, gene, chrom, start, end, strand='.',
+                 introns=0, covered_introns=0, splice_coverage=0):
+        self.transcript = transcript
+        self.gene = gene
+        self.chrom = chrom
+        self.start = start
+        self.end = end
+        self.strand = strand
+        self.introns = introns
+        self.covered_introns = covered_introns
+        self.splice_coverage = splice_coverage
+        self.key = transcript
+        self.min_coverage = 10
+        self.coverages = []
+
+    def sql_values(self):
+        return [getattr(self, f) for f in self.sql_fields]
+
+    def sql_placeholder(self):
+        return ",".join(['?' for f in self.sql_fields])
+    
+    def add_known_intron(self, coverage):
         self.covered_introns += 1
 
         if self.covered_introns > self.introns:
             logging.warning("There are more covered introns (%d) than known introns (%d) in %s" % (self.covered_introns, self.introns, self.gene))
 
-        cov = self.splice_coverage
-
         self.coverages.append(coverage)
+        self.splice_coverage = mean(self.coverages)
 
-        if cov == 0:
-            self.splice_coverage = coverage
-        else:
-            self.splice_coverage = ((cov - 1) * self.covered_introns + coverage) / cov
-
-    def compute_splice_coverage(self):
-        mean = statistics.mean(self.coverage)
-        
-        # Is there any outrageous outliers?
-        # I.e. with a very weak coverage and way below the mean and the others?
-        # Check median
 
 class SpliceGeneCollection():
     """Collection of splice genes"""
@@ -132,6 +158,78 @@ class SpliceGeneCollection():
         gene.add_known_intron(coverage)
 
 
+class SpliceTranscriptCollection():
+    """Collection of splice transcripts"""
+
+    def __init__(self, transcripts=[]):
+        self.transcripts = []
+        self.keys = {}
+        self.size = 0
+        self.add_transcripts(transcripts)
+
+    def add_transcripts(self, transcripts):
+        for transcript in transcripts:
+            self.add_transcript(transcript)
+
+    def add_transcript(self, transcript):
+        if self.is_known(transcript):
+            return
+
+        else:
+            # We're going to add 1 transcript, use the previous size for the index
+            i = self.size
+
+            self.transcripts.append(transcript)
+            self.keys[transcript.key] = i
+
+            # Increment size only at the end
+            self.size += 1
+
+    def get_transcripts(self):
+        return self.transcripts
+
+    def get_transcript(self, key):
+        if key in self.keys:
+            return self.transcripts[self.keys[key]]
+
+    def is_known(self, transcript):
+        return transcript.key in self.keys
+
+    def from_GTF_genes(gtf_genes):
+        splice_transcripts = []
+        for ggene in gtf_genes:
+            for tr in ggene.transcripts:
+                exons = tr.exons
+                all_introns = {}
+                if len(exons) > 1:
+                    for i, exon in enumerate(exons):
+                        if i > 0:
+                            intron = ""
+                            if ggene.strand == '-':
+                                intron = "%d-%d" % (exons[i-1].start, exons[i].end)
+                            else:
+                                intron = "%d-%d" % (exons[i-1].end, exons[i].start)
+                            all_introns[intron] = 1
+
+                splice_transcript = SpliceTranscript(
+                        tr.id,
+                        ggene.id,
+                        ggene.chrom,
+                        ggene.start,
+                        ggene.end,
+                        ggene.strand,
+                        introns=len(all_introns)
+                        )
+                splice_transcripts.append(splice_transcript)
+        st_collection = SpliceTranscriptCollection()
+        st_collection.add_transcripts(splice_transcripts)
+        return st_collection
+
+    def add_known_intron(self, tr_id, coverage):
+        tr = self.get_transcript(tr_id)
+        tr.add_known_intron(coverage)
+
+
 class Splice():
     """Splice junction found in a read"""
 
@@ -139,7 +237,7 @@ class Splice():
                   'left_flank', 'right_flank', 'coverage', 'tag', 'gene')
 
     def __init__(self, chrom, start, end, strand='.',
-                 left_flank=1, right_flank=1, coverage=1, tag=None, gene=None, id=None):
+                 left_flank=1, right_flank=1, coverage=1, tag=None, gene=None, id=None, transcripts=[]):
         self.chrom = chrom
         self.start = start
         self.end = end
@@ -150,6 +248,7 @@ class Splice():
         self.tag = tag
         self.id = id
         self.gene = gene
+        self.transcripts = transcripts
 
         # Generate keys
         self.key = "-".join([self.chrom,
@@ -270,6 +369,13 @@ class Splice():
         # Merge right flank
         if self.right_flank < new_splice.right_flank:
             self.right_flank = new_splice.right_flank
+
+        self.merge_transcripts(new_splice)
+
+    def merge_transcripts(self, new_splice):
+        for tr in new_splice.transcripts:
+            if tr not in self.transcripts:
+                self.transcripts.append(tr)
 
     def get_gff_record(self):
         """Return a formatted string to be written in a gff file"""
@@ -553,6 +659,19 @@ class SpliceDB():
                 )''')
         c.execute('''CREATE INDEX genes_gene_idx ON genes (gene);''')
 
+        c.execute('''CREATE TABLE transcripts (
+                    transcript text,
+                    gene text,
+                    chrom text,
+                    start int,
+                    end int,
+                    strand text,
+                    introns int,
+                    covered_introns int,
+                    splice_coverage float
+                )''')
+        c.execute('''CREATE INDEX transcripts_gene_idx ON transcripts (gene);''')
+
     def add_genes(self, genes):
         """Store a list of genes in the SpliceDB"""
 
@@ -741,6 +860,22 @@ class SpliceDB():
             fields = ",".join(gene.sql_fields)
             placeholder = gene.sql_placeholder()
             sql = "INSERT INTO genes("+fields+") VALUES("+placeholder+")"
+            logging.debug(sql)
+            logging.debug(values)
+            c.execute(sql, values)
+        conn.commit()
+
+    def add_transcripts_collection(self, st_collection):
+        """Store the transcripts collection in the database"""
+        conn = self.get_connection()
+        c = conn.cursor()
+        c.execute('''DELETE FROM transcripts''')
+
+        for transcript in st_collection.get_transcripts():
+            values = transcript.sql_values()
+            fields = ",".join(transcript.sql_fields)
+            placeholder = transcript.sql_placeholder()
+            sql = "INSERT INTO transcripts("+fields+") VALUES("+placeholder+")"
             logging.debug(sql)
             logging.debug(values)
             c.execute(sql, values)

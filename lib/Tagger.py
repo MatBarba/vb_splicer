@@ -3,7 +3,7 @@
 import argparse
 import logging
 
-from Splice import Splice, SpliceCollection, SpliceDB, SpliceGeneCollection
+from Splice import Splice, SpliceCollection, SpliceDB, SpliceGeneCollection, SpliceTranscriptCollection
 from SimpleGTF import SimpleGTF
 from BCBio import GFF
 from bx.intervals.intersection import Interval, IntervalTree
@@ -14,7 +14,7 @@ import os
 
 class Tagger(eHive.BaseRunnable):
     def run(self):
-        logging.basicConfig(level=logging.INFO)
+        logging.basicConfig(level=logging.DEBUG)
 
         splice_db = self.param_required('splice_db')
         gtf_file = self.param_required('gtf_file')
@@ -40,6 +40,7 @@ class Tagger(eHive.BaseRunnable):
         genes_intervals = Tagger.make_gene_interval_tree(genes)
         introns = Tagger.get_introns(genes)
         sg_collection = SpliceGeneCollection.from_GTF_genes(genes)
+        st_collection = SpliceTranscriptCollection.from_GTF_genes(genes)
 
         stats = {
             'known': 0,
@@ -77,6 +78,8 @@ class Tagger(eHive.BaseRunnable):
                     splice.set_tag('known')
                     splice.set_gene(same.gene)
                     sg_collection.add_known_intron(same.gene, splice.coverage)
+                    for tr in same.transcripts:
+                        st_collection.add_known_intron(tr, splice.coverage)
 
                 elif left_ok and right_ok:
                     if lefts[0].gene == rights[0].gene:
@@ -114,6 +117,7 @@ class Tagger(eHive.BaseRunnable):
             input_db.tag_back(collection)
 
         input_db.add_genes_collection(sg_collection)
+        input_db.add_transcripts_collection(st_collection)
 
         logging.info("Splices filter stats:")
         for stat, num in stats.items():
@@ -156,7 +160,14 @@ class Tagger(eHive.BaseRunnable):
                         if start > 0:
                             stats['intron'] += 1
                             end = exon.start
-                            intron = Splice(exon.chrom, start, end, '.', gene=gene.id)
+                            intron = Splice(
+                                    exon.chrom,
+                                    start,
+                                    end,
+                                    '.',
+                                    gene=gene.id,
+                                    transcripts=[tr.id]
+                                    )
                             col.add_splice(intron)
                         start = exon.end
 
