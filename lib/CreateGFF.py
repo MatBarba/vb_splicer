@@ -62,6 +62,7 @@ class CreateGFF(eHive.BaseRunnable):
         groups = {
             "all": [],
             "known": ["known"],
+            "unknown": ["inbridge", "outbridge", "left", "right", "ingene", "outgene", "nocontact"],
             "inbridge": ["inbridge"],
             "outbridge": ["outbridge"],
             "startends": ["left", "right"],
@@ -128,6 +129,10 @@ def main():
         dest='all',
         help='output gff with all splices')
     parser.add_argument(
+        '--unknown',
+        dest='unknown',
+        help='output gff with all splices that are not known')
+    parser.add_argument(
         '--coverage', dest='coverage', default=1, help='Minimum coverage')
     parser.add_argument(
             '-d', '--debug',
@@ -146,6 +151,7 @@ def main():
 
     outputs = {
         'all': args.all,
+        'unknown': args.unknown,
         'known': args.known,
         'startends': args.startends,
         'inbridge': args.inbridge,
