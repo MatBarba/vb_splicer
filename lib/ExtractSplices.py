@@ -41,7 +41,7 @@ class ExtractSplices(eHive.BaseRunnable):
         for aln in bam_reader:
             count += 1
 
-            new_splices = Splice.from_aln(aln)
+            new_splices = Splice.from_aln(aln, stranded=True)
             if len(new_splices) > 0:
                 count_splices += len(new_splices)
                 # New chromosome? Store it!

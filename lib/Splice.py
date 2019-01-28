@@ -254,13 +254,16 @@ class Splice():
         # Generate keys
         self.key = "-".join([self.chrom,
                              str(self.start),
-                             str(self.end)
+                             str(self.end),
+                             str(self.strand)
                              ])
         self.leftkey = "-".join([self.chrom,
-                                 str(self.start)
+                                 str(self.start),
+                                 str(self.strand)
                                  ])
         self.rightkey = "-".join([self.chrom,
-                                  str(self.end)
+                                  str(self.end),
+                                  str(self.strand)
                                   ])
 
     def __str__(self):
@@ -277,14 +280,23 @@ class Splice():
         """Create a list of splices from a read alignment"""
 
         # In some cases the read is not aligned, so skip it
-        if aln.iv is None:
+        if aln.iv is None or not aln.aligned:
             return []
+        
+        # Reverse strand for the opposite read
+        actual_strand = aln.iv.strand
+        if aln.pe_which == "first":
+            if actual_strand == "+":
+                actual_strand = "-"
+            elif actual_strand == "-":
+                actual_strand = "+"
 
         chrom = aln.iv.chrom
         if stranded:
-            strand = aln.iv.strand
+            strand = actual_strand
         else:
             strand = '.'
+
         read_start = aln.iv.start
 
         # Extract sequence length and gaps from CIGAR
@@ -336,7 +348,8 @@ class Splice():
         if (self.chrom == other_splice.chrom and
                 self.strand == other_splice.strand and
                 self.start == other_splice.start and
-                self.end == other_splice.end):
+                self.end == other_splice.end and
+                self.strand == other_splice.strand):
             return True
         else:
             return False

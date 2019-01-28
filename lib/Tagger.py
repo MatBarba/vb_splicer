@@ -164,7 +164,7 @@ class Tagger(eHive.BaseRunnable):
                                     exon.chrom,
                                     start,
                                     end,
-                                    '.',
+                                    exon.strand,
                                     gene=gene.id,
                                     transcripts=[tr.id]
                                     )
