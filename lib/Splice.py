@@ -301,7 +301,7 @@ class Splice():
             self.right_flank
         )
 
-    def from_aln(aln, stranded=False):
+    def from_aln(aln):
         """Create a list of splices from a read alignment"""
 
         # In some cases the read is not aligned, so skip it
@@ -321,10 +321,7 @@ class Splice():
                 actual_strand = "+"
 
         chrom = aln.iv.chrom
-        if stranded:
-            strand = actual_strand
-        else:
-            strand = '.'
+        strand = actual_strand
 
         read_start = aln.iv.start
 
@@ -503,7 +500,8 @@ class Splice():
             right = self.end + self.right_flank
             if (self.chrom == gene.chrom
                     and (left >= gene.start and left <= gene.end
-                    and right >= gene.start and right <= gene.end)):
+                    and right >= gene.start and right <= gene.end)
+                    and self.strand == gene.strand):
                 return gene.id
 
     def is_out_gene(self, genes):
@@ -515,7 +513,9 @@ class Splice():
 
             left_included = (left >= gene.start and left <= gene.end)
             right_included = (right >= gene.start and right <= gene.end)
-            if (self.chrom == gene.chrom and (left_included ^ right_included)):
+            if (self.chrom == gene.chrom
+                    and (left_included ^ right_included)
+                    and self.strand == gene.strand):
                 return gene.id
 
     def gene_overlap(self, genes_intervals):
@@ -527,8 +527,8 @@ class Splice():
                 # Just one gene? Take the first one
                 gene = genes[0]
 
-                left_included = (self.start >= gene.start and self.start <= gene.end)
-                right_included = (self.end >= gene.start and self.end <= gene.end)
+                left_included = (self.start >= gene.start and self.start <= gene.end and self.strand == gene.strand)
+                right_included = (self.end >= gene.start and self.end <= gene.end and self.strand == gene.strand)
                 if left_included and right_included:
                     return 'in', gene
                 else:
