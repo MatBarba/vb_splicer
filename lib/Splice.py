@@ -14,6 +14,8 @@ from Bio.SeqFeature import SeqFeature, FeatureLocation
 from statistics import mean
 from bx.intervals.intersection import IntervalTree
 
+import collections
+
 class SpliceGene():
     """A simple gene representation for the spliceDB"""
 
@@ -245,6 +247,8 @@ class Splice():
         self.strand = strand
         self.left_flank = left_flank
         self.right_flank = right_flank
+        self.all_left = {}
+        self.all_right = {}
         self.coverage = coverage
         self.tag = tag
         self.id = id
@@ -266,6 +270,27 @@ class Splice():
                                   str(self.strand)
                                   ])
 
+    def redefine_flanks(self):
+        new_left = Splice.max_counter(self.all_left)
+        if new_left is not None:
+            self.left_flank = new_left
+
+        new_right = Splice.max_counter(self.all_right)
+        if new_right is not None:
+            self.right_flank = new_right
+
+    def max_counter(freqs):
+        if len(freqs) > 0:
+            max_size = 0
+            max_freq = 0
+            for size in sorted(freqs):
+                freq = freqs[size]
+                if freq >= max_freq:
+                    max_size = size
+                    max_freq = freq
+            return max_size
+
+
     def __str__(self):
         return "%s:%d-%d (%s) [%d-%d]\n" % (
             self.chrom,
@@ -281,6 +306,10 @@ class Splice():
 
         # In some cases the read is not aligned, so skip it
         if aln.iv is None or not aln.aligned:
+            return []
+
+        # Only accept the best quality
+        if aln.aQual < 60:
             return []
         
         # Reverse strand for the opposite read
@@ -327,12 +356,12 @@ class Splice():
 
         cur_seq = 0
         for c in aln.cigar:
-            if c.type == "N":
+            if c.type in ("M", "I", "="):
+                seqs[cur_seq] += c.size
+            elif c.type == "N":
                 gaps.append(c.size)
                 seqs.append(0)
                 cur_seq += 1
-            elif c.type in ("M", "I", "S", "="):
-                seqs[cur_seq] += c.size
 
         return seqs, gaps
 
@@ -366,6 +395,18 @@ class Splice():
         else:
             return False
 
+    def add_left(self, left):
+        if left not in self.all_left:
+            self.all_left[left] = 1
+        else:
+            self.all_left[left] += 1
+
+    def add_right(self, right):
+        if right not in self.all_right:
+            self.all_right[right] = 1
+        else:
+            self.all_right[right] += 1
+
     def merge(self, new_splice):
         """Merge the coverage and flanks of two splices
 
@@ -377,6 +418,9 @@ class Splice():
         self.coverage += new_splice.coverage
 
         # Merge left flank
+        self.add_left(new_splice.left_flank)
+        self.add_right(new_splice.right_flank)
+
         if self.left_flank < new_splice.left_flank:
             self.left_flank = new_splice.left_flank
 
@@ -656,6 +700,10 @@ class SpliceCollection():
 
         # Replace the current collection
         self.__init__(final_splices)
+
+    def redefine_flanks(self):
+        for splice in self.splices:
+            splice.redefine_flanks()
 
 
 class SpliceDB():
