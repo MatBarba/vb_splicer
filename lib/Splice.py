@@ -431,6 +431,10 @@ class Splice():
         for tr in new_splice.transcripts:
             if tr not in self.transcripts:
                 self.transcripts.append(tr)
+    
+    def splice_name(self):
+        return "%s:%d-%d_%s" % (self.chrom, self.start, self.end, self.strand)
+        
 
     def get_gff_record(self):
         """Return a formatted string to be written in a gff file"""
@@ -450,7 +454,7 @@ class Splice():
             "source": "rnaseq",
             "score": self.coverage,
             "Name": "x%d" % self.coverage,
-            "ID": self.key
+            "ID": self.splice_name()
         }
         top_feat = SeqFeature(
             location,
