@@ -34,12 +34,16 @@ class CreateGFF(eHive.BaseRunnable):
         gff_basename = os.path.join(gff_dir, species)
         outputs = {
             'known': gff_basename + '_known.gff',
+            'unknown': gff_basename + '_unknown.gff',
             'startends': gff_basename + '_startends.gff',
             'inbridge': gff_basename + '_inbridge.gff',
             'outbridge': gff_basename + '_outbridge.gff',
             'ingene': gff_basename + '_ingene.gff',
             'outgene': gff_basename + '_outgene.gff',
             'nocontact': gff_basename + '_nocontact.gff',
+            'connected': gff_basename + '_connected.gff',
+            'unconnected': gff_basename + '_unconnected.gff',
+            'all': gff_basename + '_all.gff',
         }
 
         # Run it!
@@ -69,6 +73,8 @@ class CreateGFF(eHive.BaseRunnable):
             "ingene": ["ingene"],
             "outgene": ["outgene"],
             "nocontact": ["nocontact"],
+            "connected": ["inbridge", "outbridge", "left", "right"],
+            "unconnected": ["ingene", "outgene", "nocontact"],
         }
         for group, tags in groups.items():
             if group in outputs and outputs[group] is not None:
@@ -76,9 +82,9 @@ class CreateGFF(eHive.BaseRunnable):
                 filter_genes = {}
                 filter_coverage = 1
                 nointron_coverage = 1
-                if group in ("startends", "ingene", "outgene"):
+                if group in ("startends", "ingene", "outgene", "connected"):
                     filter_genes = genes
-                if group in ("ingene", "outgene"):
+                if group in ("ingene", "outgene", "unconnected"):
                     nointron_coverage = coverage
                 if group in ("nocontact"):
                     filter_coverage = coverage
@@ -133,6 +139,14 @@ def main():
         dest='unknown',
         help='output gff with all splices that are not known')
     parser.add_argument(
+        '--connected',
+        dest='connected',
+        help='output gff with all unknown splices that are connected to a known exon')
+    parser.add_argument(
+        '--unconnected',
+        dest='unconnected',
+        help='output gff with all unknown splices that are not connected to a known exon')
+    parser.add_argument(
         '--coverage', dest='coverage', default=1, help='Minimum coverage')
     parser.add_argument(
             '-d', '--debug',
@@ -157,6 +171,8 @@ def main():
         'inbridge': args.inbridge,
         'outbridge': args.outbridge,
         'nocontact': args.nocontact,
+        'connected': args.connected,
+        'unconnected': args.unconnected,
     }
 
     CreateGFF.create_gff(args.input, outputs, int(args.coverage))
