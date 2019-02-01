@@ -313,15 +313,15 @@ class Splice():
             return []
         
         # Reverse strand for the opposite read
-        actual_strand = aln.iv.strand
-        if aln.pe_which == "first":
-            if actual_strand == "+":
-                actual_strand = "-"
-            elif actual_strand == "-":
-                actual_strand = "+"
+        fields = {}
+        for f in aln.optional_fields:
+            fields[f[0]] = f[1]
+
+        strand = "."
+        if "XS" in fields:
+            strand = fields["XS"]
 
         chrom = aln.iv.chrom
-        strand = actual_strand
 
         read_start = aln.iv.start
 
