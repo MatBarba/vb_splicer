@@ -308,8 +308,8 @@ class Splice():
         if aln.iv is None or not aln.aligned:
             return []
 
-        # Only accept the best quality
-        if aln.aQual < 60:
+        # Only accept the minimum quality
+        if aln.aQual == 0:
             return []
         
         # Reverse strand for the opposite read
@@ -333,11 +333,11 @@ class Splice():
         for position, gap in enumerate(gaps):
             left_flank = seqs[position]
             right_flank = seqs[position+1]
-            seq_diff += left_flank
-            start = read_start + seq_diff
+            start = read_start + seq_diff + left_flank
             end = start + gap
+            seq_diff += left_flank + gap
             splices.append(
-                Splice(chrom, start, end, strand, left_flank, right_flank)
+                Splice(chrom, start, end, strand, left_flank - 1, right_flank)
             )
 
         return splices
@@ -353,7 +353,7 @@ class Splice():
 
         cur_seq = 0
         for c in aln.cigar:
-            if c.type in ("M", "I", "="):
+            if c.type in ("M", "D", "="):
                 seqs[cur_seq] += c.size
             elif c.type == "N":
                 gaps.append(c.size)
