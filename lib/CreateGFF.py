@@ -25,34 +25,28 @@ class CreateGFF(eHive.BaseRunnable):
         gff_dir = self.param_required('gff_dir')
         splice_db = self.param_required('splice_db')
         gtf_file = self.param_required('gtf_file')
-        coverage = self.param('coverage')
 
         if not os.path.exists(gff_dir):
             os.makedirs(gff_dir)
 
         # Create the db file name
         gff_basename = os.path.join(gff_dir, species)
-        outputs = {
-            'known': gff_basename + '_known.gff',
-            'unknown': gff_basename + '_unknown.gff',
-            'startends': gff_basename + '_startends.gff',
-            'inbridge': gff_basename + '_inbridge.gff',
-            'outbridge': gff_basename + '_outbridge.gff',
-            'ingene': gff_basename + '_ingene.gff',
-            'outgene': gff_basename + '_outgene.gff',
-            'nocontact': gff_basename + '_nocontact.gff',
-            'connected': gff_basename + '_connected.gff',
-            'unconnected': gff_basename + '_unconnected.gff',
-            'all': gff_basename + '_all.gff',
-        }
+        outputs = [
+                { "category": 'known', "file": gff_basename + '_known.gff', "coverage": 1 },
+                { "category": 'unknown', "file": gff_basename + '_unknown_all.gff', "coverage": 1 },
+                { "category": 'unknown', "file": gff_basename + '_unknown_10.gff', "coverage": 10 },
+                { "category": 'unknown', "file": gff_basename + '_unknown_100.gff', "coverage": 100 },
+                { "category": 'unknown', "file": gff_basename + '_unknown_1000.gff', "coverage": 1000 },
+                { "category": 'unknown', "file": gff_basename + '_unknown_10000.gff', "coverage": 10000 }
+        ]
 
         # Run it!
-        CreateGFF.create_gff(splice_db, outputs, coverage)
+        CreateGFF.create_gff(splice_db, outputs)
 
-        for gff in outputs.values():
+        for output in outputs:
             self.dataflow({
                 'species': species,
-                'gff': gff,
+                'gff': output["file"],
             }, 2)
 
     def create_gff(input, outputs, coverage=1):
@@ -76,8 +70,14 @@ class CreateGFF(eHive.BaseRunnable):
             "connected": ["inbridge", "outbridge", "left", "right"],
             "unconnected": ["ingene", "outgene", "nocontact"],
         }
-        for group, tags in groups.items():
-            if group in outputs and outputs[group] is not None:
+
+        for output in outputs:
+            cat = output["category"]
+            
+            if cat in groups:
+                group = cat
+                tags = groups[cat]
+
                 logging.info("Writing group " + group)
                 filter_genes = {}
                 filter_coverage = 1
@@ -88,15 +88,20 @@ class CreateGFF(eHive.BaseRunnable):
                     nointron_coverage = coverage
                 if group in ("nocontact"):
                     filter_coverage = coverage
+                if group in ("unknown"):
+                    filter_coverage = output["coverage"]
+
                 collection = input_db.get_collection(
                         tags=tags,
                         genes=filter_genes,
                         coverage=filter_coverage,
                         nointron_coverage=nointron_coverage
                         )
+
                 if group in ("nocontact", "ingene", "outgene"):
                     collection.filter_by_overlap()
-                CreateGFF.print_gff(collection, outputs[group])
+                
+                CreateGFF.print_gff(collection, output["file"])
 
     def print_gff(collection, output):
         records = []
