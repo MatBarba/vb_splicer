@@ -433,7 +433,7 @@ class Splice():
                 self.transcripts.append(tr)
     
     def splice_name(self):
-        return "%s:%d-%d_%s" % (self.chrom, self.start, self.end, self.strand)
+        return "%s:%d..%d_%s" % (self.chrom, self.start, self.end, self.strand)
         
 
     def get_gff_record(self):
