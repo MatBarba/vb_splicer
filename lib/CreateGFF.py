@@ -33,7 +33,7 @@ class CreateGFF(eHive.BaseRunnable):
         gff_basename = os.path.join(gff_dir, species)
         outputs = [
                 { "category": 'known', "file": gff_basename + '_known.gff', "coverage": 1 },
-                { "category": 'unknown', "file": gff_basename + '_unknown_all.gff', "coverage": 1 },
+#                { "category": 'unknown', "file": gff_basename + '_unknown_all.gff', "coverage": 1 },
                 { "category": 'unknown', "file": gff_basename + '_unknown_10.gff', "coverage": 10 },
                 { "category": 'unknown', "file": gff_basename + '_unknown_100.gff', "coverage": 100 },
                 { "category": 'unknown', "file": gff_basename + '_unknown_1000.gff', "coverage": 1000 },
@@ -79,27 +79,14 @@ class CreateGFF(eHive.BaseRunnable):
                 tags = groups[cat]
 
                 logging.info("Writing group " + group)
-                filter_genes = {}
-                filter_coverage = 1
                 nointron_coverage = 1
-                if group in ("startends", "ingene", "outgene", "connected"):
-                    filter_genes = genes
-                if group in ("ingene", "outgene", "unconnected"):
-                    nointron_coverage = coverage
-                if group in ("nocontact"):
-                    filter_coverage = coverage
                 if group in ("unknown"):
-                    filter_coverage = output["coverage"]
+                    coverage = output["coverage"]
 
                 collection = input_db.get_collection(
                         tags=tags,
-                        genes=filter_genes,
-                        coverage=filter_coverage,
-                        nointron_coverage=nointron_coverage
+                        coverage=coverage,
                         )
-
-                if group in ("nocontact", "ingene", "outgene"):
-                    collection.filter_by_overlap()
                 
                 CreateGFF.print_gff(collection, output["file"])
 

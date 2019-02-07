@@ -641,70 +641,6 @@ class SpliceCollection():
                 splices.append(self.splices[i])
         return splices
     
-    def filter_by_gene_coverage(splices, genes, coverage=1):
-        acceptable_ratio = 0.5
-
-        if len(genes) == 0:
-            return splices
-
-        new_splices = []
-
-        print("Filtering %d splices" % len(splices))
-
-        for splice in splices:
-            if splice.gene is not None:
-                if splice.gene in genes:
-                    vals = genes[splice.gene]
-
-                    # Compare min gene value and this splice coverage
-                    if splice.coverage > vals['min'] * acceptable_ratio:
-                        new_splices.append(splice)
-                else:
-                    # This case covered_means that there is no intron in the current gene model
-                    # We want to keep the splices that are in those genes in case there should be
-                    # introns in their place
-                    if splice.coverage >= coverage:
-                        new_splices.append(splice)
-        print("Filtering result: %d splices" % len(new_splices))
-
-        return new_splices
-
-    def filter_by_overlap(self):
-        groups = {}
-        itrees = {}
-        
-        logging.info("Filtering by overlap from %s splices" % len(self.splices))
-
-        for splice in self.splices:
-            if splice.chrom not in itrees:
-                itrees[splice.chrom] = IntervalTree()
-            itree = itrees[splice.chrom]
-            overlaps = itree.find(splice.start, splice.end)
-            
-            # Define the group
-            if len(overlaps) > 0:
-                group = overlaps[0][1]
-            else:
-                group = splice
-                groups[group] = []
-
-            groups[group].append(splice)
-            itree.insert(splice.start, splice.end, [splice, group])
-        
-        final_splices = []
-        for group in groups.values():
-            mean_coverage = mean(map(lambda x: x.coverage, group))
-
-            # Only keep those that are above the mean/2 (let's be generous)
-            for splice in group:
-                if splice.coverage >= mean_coverage/2:
-                    final_splices.append(splice)
-
-        logging.info("After filtering: %s splices" % len(final_splices))
-
-        # Replace the current collection
-        self.__init__(final_splices)
-
     def redefine_flanks(self):
         for splice in self.splices:
             splice.redefine_flanks()
@@ -839,18 +775,15 @@ class SpliceDB():
             c.execute(sql, values)
         conn.commit()
 
-    def get_collection(self, chrom='', chroms=[], tags=[], coverage=1, nointron_coverage=1, genes={}):
+    def get_collection(self, chrom='', chroms=[], tags=[], coverage=1):
         """Retrieve a SpliceCollection from the SpliceDB"""
 
-        splices = self.get_splices(chrom, chroms, tags, coverage, nointron_coverage)
-
-        splices = SpliceCollection.filter_by_gene_coverage(splices, genes, coverage)
-
+        splices = self.get_splices(chrom, chroms, tags, coverage)
         col = SpliceCollection(splices)
 
         return col
 
-    def get_splices(self, chrom='', chroms=[], tags=[], coverage=1, nointron_coverage=1):
+    def get_splices(self, chrom='', chroms=[], tags=[], coverage=1):
         """Retrieve a raw list of splices from the SpliceDB"""
         conn = self.get_connection()
         c = conn.cursor()
@@ -885,11 +818,6 @@ class SpliceDB():
         if coverage > 1:
             conditions.append("s.coverage>=?")
             data.append(coverage)
-
-        if nointron_coverage > 1:
-            left_join = "LEFT JOIN genes g USING(gene)"
-            conditions.append("(g.covered_introns > 0 OR s.coverage > ?)")
-            data.append(nointron_coverage)
 
         if left_join != '':
             sql += " " + left_join + " "
