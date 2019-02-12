@@ -88,9 +88,10 @@ class Tagger(eHive.BaseRunnable):
                     cur_end = cur_start + seq_cache_length
                     cur_seq = Tagger.get_rest_sequence(rest_server, species, cur_chrom, cur_start, cur_end)
 
-                # Get donor/acceptor
-                donor, acceptor = Tagger.get_donor_acceptor(cur_seq, cur_start, splice)
-                splice.set_donor_acceptor(donor, acceptor)
+                # Get donor/acceptor (if there is a direction)
+                if splice.strand != '.':
+                    donor, acceptor = Tagger.get_donor_acceptor(cur_seq, cur_start, splice)
+                    splice.set_donor_acceptor(donor, acceptor)
 
                 left_ok = introns.left_is_known(splice)
                 right_ok = introns.right_is_known(splice)
