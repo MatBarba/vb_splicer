@@ -237,10 +237,10 @@ class Splice():
     """Splice junction found in a read"""
 
     sql_fields = ('chrom', 'start', 'end', 'strand',
-                  'left_flank', 'right_flank', 'coverage', 'tag', 'gene')
+                  'left_flank', 'right_flank', 'coverage', 'tag', 'non_canonical', 'gene')
 
     def __init__(self, chrom, start, end, strand='.',
-                 left_flank=1, right_flank=1, coverage=1, tag=None, gene=None, id=None, transcripts=[]):
+                 left_flank=1, right_flank=1, coverage=1, tag=None, non_canonical=None, gene=None, id=None, transcripts=[]):
         self.chrom = chrom
         self.start = start
         self.end = end
@@ -251,6 +251,7 @@ class Splice():
         self.all_right = {}
         self.coverage = coverage
         self.tag = tag
+        self.non_canonical = non_canonical
         self.id = id
         self.gene = gene
         self.transcripts = transcripts
@@ -392,17 +393,17 @@ class Splice():
         else:
             return False
 
-    def add_left(self, left):
+    def add_left(self, left, coverage):
         if left not in self.all_left:
-            self.all_left[left] = 1
+            self.all_left[left] = coverage
         else:
-            self.all_left[left] += 1
+            self.all_left[left] += coverage
 
-    def add_right(self, right):
+    def add_right(self, right, coverage):
         if right not in self.all_right:
-            self.all_right[right] = 1
+            self.all_right[right] = coverage
         else:
-            self.all_right[right] += 1
+            self.all_right[right] += coverage
 
     def merge(self, new_splice):
         """Merge the coverage and flanks of two splices
@@ -415,8 +416,8 @@ class Splice():
         self.coverage += new_splice.coverage
 
         # Merge left flank
-        self.add_left(new_splice.left_flank)
-        self.add_right(new_splice.right_flank)
+        self.add_left(new_splice.left_flank, new_splice.coverage)
+        self.add_right(new_splice.right_flank, new_splice.coverage)
 
         if self.left_flank < new_splice.left_flank:
             self.left_flank = new_splice.left_flank
@@ -432,9 +433,17 @@ class Splice():
             if tr not in self.transcripts:
                 self.transcripts.append(tr)
     
-    def splice_name(self):
-        return "%s:%d..%d_%s" % (self.chrom, self.start, self.end, self.strand)
+    def splice_id(self):
+        sid = "%s:%d..%d_%s" % (self.chrom, self.start, self.end, self.strand)
+        if self.non_canonical is not None:
+            sid = "%s (%s)" % (sid, self.non_canonical)
+        return sid
         
+    def splice_name(self):
+        name = "x%d" % self.coverage
+        if self.non_canonical is not None:
+            name = "%s (%s)" % (name, self.non_canonical)
+        return name
 
     def get_gff_record(self):
         """Return a formatted string to be written in a gff file"""
@@ -449,12 +458,12 @@ class Splice():
         else:
             strand = 0
 
-        location = FeatureLocation(gene_start - 1, gene_end)
+        location = FeatureLocation(gene_start, gene_end)
         gene_qualif = {
             "source": "rnaseq",
             "score": self.coverage,
-            "Name": "x%d" % self.coverage,
-            "ID": self.splice_name()
+            "Name": self.splice_name(),
+            "ID": self.splice_id()
         }
         top_feat = SeqFeature(
             location,
@@ -466,7 +475,7 @@ class Splice():
         # Append the features
         sub_features = []
         sub_features.append(SeqFeature(
-            FeatureLocation(gene_start - 1, self.start),
+            FeatureLocation(gene_start, self.start),
             'exon',
             strand=strand,
             qualifiers={"source": "rnaseq"}
@@ -493,6 +502,10 @@ class Splice():
 
     def set_tag(self, tag):
         self.tag = tag
+
+    def set_donor_acceptor(self, donor, acceptor):
+        if donor != 'GT' or acceptor != 'AG':
+            self.non_canonical = donor + ".." + acceptor
 
     def set_gene(self, gene):
         self.gene = gene
@@ -678,6 +691,7 @@ class SpliceDB():
                     right_flank int,
                     coverage int,
                     tag text,
+                    non_canonical text,
                     gene text
                 )''')
         c.execute('''CREATE INDEX chrom_idx ON splices (chrom);''')
@@ -845,6 +859,7 @@ class SpliceDB():
                 s['right_flank'],
                 coverage=s['coverage'],
                 tag=s['tag'],
+                non_canonical=s['non_canonical'],
                 gene=s['gene'],
                 id=s['ROWID']
             )
@@ -856,7 +871,7 @@ class SpliceDB():
         conn = self.get_connection()
         c = conn.cursor()
 
-        c.execute('''UPDATE splices set tag=NULL, gene=NULL''')
+        c.execute('''UPDATE splices set tag=NULL, gene=NULL, non_canonical=NULL''')
 
     def tag_back(self, collection):
         """Apply the tags of splices back to database"""
@@ -871,12 +886,12 @@ class SpliceDB():
         conn.commit()
 
     def tag_splice(self, splice, cursor):
-        values = [splice.tag, splice.gene, splice.id]
-        fields = ",".join(["tag", "gene", "ROWID"])
+        values = [splice.tag, splice.non_canonical, splice.gene, splice.id]
+        fields = ",".join(["tag", "non_canonical", "gene", "ROWID"])
         conditions = "ROWID=?"
-        sql = "UPDATE splices SET tag=?, gene=? WHERE " + conditions
-        logging.debug(sql)
-        logging.debug(values)
+        sql = "UPDATE splices SET tag=?, non_canonical=?, gene=? WHERE " + conditions
+        #logging.debug(sql)
+        #logging.debug(values)
         cursor.execute(sql, values)
 
     def add_genes_collection(self, sg_collection):

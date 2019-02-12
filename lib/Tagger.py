@@ -11,14 +11,22 @@ from bx.intervals.intersection import Interval, IntervalTree
 import eHive
 import os
 
+import requests, sys
 
 class Tagger(eHive.BaseRunnable):
+    def param_default(self):
+        return {
+                rest_server: "https://www.vectorbase.org/rest"
+        }
+
     def run(self):
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(level=logging.INFO)
 
         splice_db = self.param_required('splice_db')
         gtf_file = self.param_required('gtf_file')
         do_not_retag = self.param('do_not_retag')
+        species = self.param('species')
+        rest_server = self.param('rest_server')
 
         if do_not_retag:
             return
@@ -28,9 +36,9 @@ class Tagger(eHive.BaseRunnable):
             return
 
         # Run it
-        Tagger.tag_splices(splice_db, gtf_file)
+        Tagger.tag_splices(splice_db, gtf_file, species, rest_server)
 
-    def tag_splices(input, gtf_path):
+    def tag_splices(input, gtf_path, species, rest_server):
         input_db = SpliceDB(input)
         input_db.detag()
 
@@ -56,21 +64,40 @@ class Tagger(eHive.BaseRunnable):
         logging.info("Get chroms from db")
         chroms = input_db.get_chroms()
         
+        # Prepare sequence cache
+        cur_chrom = ''
+        cur_start = 0
+        cur_end = 0
+        cur_seq = ''
+        seq_cache_length = 1000000
+
         nc = 0
+
         for chrom in chroms.keys():
-            logging.info("%d/%d Tag chrom %s" % (nc, len(chroms), chrom))
             collection = input_db.get_collection(chroms=[chrom])
 
             # Compare all the splices with the introns
             splices = collection.get_splices()
-            logging.info("\t%d splices to tag" % len(splices))
+            logging.info("%d/%d Tag %d splices in chrom %s" % (nc, len(chroms), len(splices), chrom))
             nc += 1
             for splice in splices:
+                # Update sequence cache
+                if chrom != cur_chrom or cur_end < splice.end:
+                    cur_chrom = chrom
+                    cur_start = splice.start
+                    cur_end = cur_start + seq_cache_length
+                    cur_seq = Tagger.get_rest_sequence(rest_server, species, cur_chrom, cur_start, cur_end)
+
+                # Get donor/acceptor
+                donor, acceptor = Tagger.get_donor_acceptor(cur_seq, cur_start, splice)
+                splice.set_donor_acceptor(donor, acceptor)
+
                 left_ok = introns.left_is_known(splice)
                 right_ok = introns.right_is_known(splice)
                 lefts = introns.get_left_splices(splice)
                 rights = introns.get_right_splices(splice)
 
+                # Check against known intron
                 if introns.is_known(splice):
                     same = introns.get_same_splice(splice)
 
@@ -134,6 +161,38 @@ class Tagger(eHive.BaseRunnable):
 
         return intervals
 
+
+    def get_rest_sequence(rest_server, species, chrom, start, end):
+        web_species = species[0].upper() + species[1:]
+        ext = "/sequence/region/%s/%s:%d-%d?" % (web_species, chrom, start, end)
+        r = requests.get(rest_server + ext, headers={ "Content-Type" : "text/plain"})
+        
+        # Too bad if we fail, but not catastrophic
+        if not r.ok:
+            r.raise_for_status()
+        #    sys.exit()
+
+        return(r.text)
+
+    def get_donor_acceptor(seq, seq_start, splice):
+        donor_start = splice.start - seq_start + 1
+        donor_end = donor_start + 2
+        acceptor_start = splice.end - seq_start - 1
+        acceptor_end = acceptor_start + 2
+
+        donor = seq[donor_start:donor_end]
+        acceptor = seq[acceptor_start:acceptor_end]
+
+        if splice.strand == "-":
+            new_donor = Tagger.reverse_strand(acceptor)
+            new_acceptor = Tagger.reverse_strand(donor)
+            donor = new_donor
+            acceptor = new_acceptor
+
+        return donor, acceptor
+
+    def reverse_strand(seq):
+        return seq.translate(str.maketrans('CGTA', 'GCAT'))[::-1]
 
     def get_introns(genes):
 
