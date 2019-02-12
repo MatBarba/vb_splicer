@@ -54,9 +54,6 @@ class CreateGFF(eHive.BaseRunnable):
             "Import coverage filtered splices (coverage >= %d)" % coverage)
         input_db = SpliceDB(input)
 
-        logging.info("Loade genes coverage")
-        genes = input_db.get_genes_coverage()
-
         groups = {
             "all": [],
             "known": ["known"],
