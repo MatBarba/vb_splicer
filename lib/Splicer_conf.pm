@@ -191,22 +191,6 @@ sub pipeline_analyses {
         '1' => '?accu_name=splice_dbs&accu_address={species}[]&accu_input_variable=splice_db',
       }   
     },
-    
-#    {
-#      -logic_name        => 'Extract_splices',
-#      -module            => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
-#      -parameters        => {
-#        'cmd' => 'python3 ~/src/rnaseq/splices/splice2/lib/ExtractSplices.py #bam_file# #splice_db#',
-#      },
-#      -analysis_capacity => 30,
-#      -max_retry_count => 0,
-#      -meadow_type       => 'LSF',
-#      -rc_name    => 'bigmem',
-#      -flow_into  => {
-#        '1' => '?accu_name=splice_dbs&accu_address={species}[]&accu_input_variable=splice_db',
-#      }   
-#    },
-
  
     {
       -logic_name => 'Merge_splices',
@@ -221,7 +205,25 @@ sub pipeline_analyses {
       -meadow_type       => 'LSF',
       -rc_name    => 'bigmem',
       -flow_into  => {
+        '-1' => 'Merge_splices_highmem',
         '2' => 'Tagger',
+      }
+    },
+ 
+    {
+      -logic_name => 'Merge_splices_highmem',
+      -module     => 'MergeSplices',
+      -language   => 'python3',
+      -parameters        => {
+        splice_dir     => $self->o('splice_dir'),
+        force_merge => $self->o('force_merge'),
+      },
+      -analysis_capacity => 10,
+      -max_retry_count => 0,
+      -meadow_type       => 'LSF',
+      -rc_name    => 'biggermem',
+      -flow_into  => {
+        '2' => 'Tagger_highmem',
       }
     },
 
@@ -239,8 +241,27 @@ sub pipeline_analyses {
       -meadow_type       => 'LSF',
       -flow_into  => {
         '1' => 'Create_GFF',
+        '-1' => 'Tagger_highmem',
       }
     },
+
+    {
+      -logic_name => 'Tagger_highmem',
+      -module     => 'Tagger',
+      -language   => 'python3',
+      -parameters        => {
+        do_not_retag => $self->o('do_not_retag'),
+        rest_server => $self->o('rest_server'),
+      },
+      -analysis_capacity => 20,
+      -max_retry_count => 0,
+      -rc_name    => 'biggermem',
+      -meadow_type       => 'LSF',
+      -flow_into  => {
+        '1' => 'Create_GFF_highmem',
+      }
+    },
+
 
     {
       -logic_name => 'Create_GFF',
