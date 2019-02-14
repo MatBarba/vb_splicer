@@ -280,6 +280,10 @@ class Splice():
         if new_right is not None:
             self.right_flank = new_right
 
+        # Free up memory
+        self.all_left = []
+        self.all_right = []
+
     def max_counter(freqs):
         if len(freqs) > 0:
             max_size = 0
@@ -418,13 +422,6 @@ class Splice():
         # Merge left flank
         self.add_left(new_splice.left_flank, new_splice.coverage)
         self.add_right(new_splice.right_flank, new_splice.coverage)
-
-        if self.left_flank < new_splice.left_flank:
-            self.left_flank = new_splice.left_flank
-
-        # Merge right flank
-        if self.right_flank < new_splice.right_flank:
-            self.right_flank = new_splice.right_flank
 
         self.merge_transcripts(new_splice)
 
@@ -776,6 +773,8 @@ class SpliceDB():
 
     def add_collection(self, collection):
         """Store all the Splices from a SpliceCollection in the SpliceDB"""
+        # Make sure to compute the flanks before storage
+        collection.redefine_flanks()
 
         conn = self.get_connection()
         c = conn.cursor()

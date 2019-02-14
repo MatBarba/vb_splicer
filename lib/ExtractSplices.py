@@ -59,7 +59,6 @@ class ExtractSplices(eHive.BaseRunnable):
         logging.info("%s done: Writing %d splices to %s" % (
             cur_chrom, collection.size, sqlite_output))
 
-        collection.redefine_flanks()
         db.add_collection(collection)
 
         logging.info("Total read alignments: " + str(count))
