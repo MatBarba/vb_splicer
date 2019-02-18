@@ -247,8 +247,8 @@ class Splice():
         self.strand = strand
         self.left_flank = left_flank
         self.right_flank = right_flank
-        self.all_left = {}
-        self.all_right = {}
+        self.all_left = { left_flank: coverage }
+        self.all_right = { right_flank: coverage }
         self.coverage = coverage
         self.tag = tag
         self.non_canonical = non_canonical
@@ -285,12 +285,17 @@ class Splice():
         self.all_right = []
 
     def max_counter(freqs):
+        min_size = 10
+
         if len(freqs) > 0:
             max_size = 0
             max_freq = 0
             for size in sorted(freqs):
                 freq = freqs[size]
-                if freq >= max_freq:
+
+                # We want to have at least 10bp for a flank, even if the majority is less
+                # Beyond that, take the highest frequency
+                if size < min_size or freq >= max_freq:
                     max_size = size
                     max_freq = freq
             return max_size
@@ -342,7 +347,7 @@ class Splice():
             end = start + gap
             seq_diff += left_flank + gap
             splices.append(
-                Splice(chrom, start, end, strand, left_flank - 1, right_flank)
+                Splice(chrom, start, end, strand, left_flank, right_flank)
             )
 
         return splices
