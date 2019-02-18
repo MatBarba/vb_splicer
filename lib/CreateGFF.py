@@ -15,6 +15,7 @@ class CreateGFF(eHive.BaseRunnable):
 
     def param_defaults(self):
         return {
+            'category': 'known',
             'coverage': 1
         }
 
@@ -25,31 +26,28 @@ class CreateGFF(eHive.BaseRunnable):
         gff_dir = self.param_required('gff_dir')
         splice_db = self.param_required('splice_db')
         gtf_file = self.param_required('gtf_file')
+        category = self.param_required('category')
+        coverage = self.param_required('coverage')
 
         if not os.path.exists(gff_dir):
             os.makedirs(gff_dir)
 
         # Create the db file name
         gff_basename = os.path.join(gff_dir, species)
-        outputs = [
-                { "category": 'known', "file": gff_basename + '_known.gff', "coverage": 1 },
-#                { "category": 'unknown', "file": gff_basename + '_unknown_all.gff', "coverage": 1 },
-                { "category": 'unknown', "file": gff_basename + '_unknown_10.gff', "coverage": 10 },
-                { "category": 'unknown', "file": gff_basename + '_unknown_100.gff', "coverage": 100 },
-                { "category": 'unknown', "file": gff_basename + '_unknown_1000.gff', "coverage": 1000 },
-                { "category": 'unknown', "file": gff_basename + '_unknown_10000.gff', "coverage": 10000 }
-        ]
+        file_suffix = ""
+        if coverage > 1:
+            file_suffix = "_" + str(coverage)
+        filename = gff_basename + "_" + category + file_suffix + ".gff"
 
         # Run it!
-        CreateGFF.create_gff(splice_db, outputs)
+        CreateGFF.create_gff(splice_db, filename, category, coverage)
 
-        for output in outputs:
-            self.dataflow({
-                'species': species,
-                'gff': output["file"],
+        self.dataflow({
+            'species': species,
+            'gff': filename,
             }, 2)
 
-    def create_gff(input, outputs, coverage=1):
+    def create_gff(input, filename, category, coverage=1):
         logging.info(
             "Import coverage filtered splices (coverage >= %d)" % coverage)
         input_db = SpliceDB(input)
@@ -68,24 +66,15 @@ class CreateGFF(eHive.BaseRunnable):
             "unconnected": ["ingene", "outgene", "nocontact"],
         }
 
-        for output in outputs:
-            cat = output["category"]
-            
-            if cat in groups:
-                group = cat
-                tags = groups[cat]
+        if category in groups:
+            group = category
+            tags = groups[category]
 
-                logging.info("Writing group " + group)
-                nointron_coverage = 1
-                if group in ("unknown"):
-                    coverage = output["coverage"]
-
-                collection = input_db.get_collection(
-                        tags=tags,
-                        coverage=coverage,
-                        )
-                
-                CreateGFF.print_gff(collection, output["file"])
+            logging.info("Writing group " + group)
+            collection = input_db.get_collection(tags=tags, coverage=coverage)
+            CreateGFF.print_gff(collection, filename)
+        else:
+            logging.warn("Unknown category %s" % category)
 
     def print_gff(collection, output):
         records = []

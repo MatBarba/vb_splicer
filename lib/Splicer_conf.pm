@@ -240,7 +240,7 @@ sub pipeline_analyses {
       -rc_name    => 'bigmem',
       -meadow_type       => 'LSF',
       -flow_into  => {
-        '1' => 'Create_GFF',
+        '1' => 'GFFFactory',
         '-1' => 'Tagger_highmem',
       }
     },
@@ -258,10 +258,22 @@ sub pipeline_analyses {
       -rc_name    => 'biggermem',
       -meadow_type       => 'LSF',
       -flow_into  => {
-        '1' => 'Create_GFF_highmem',
+        '1' => 'GFFFactory',
       }
     },
 
+    {
+      -logic_name => 'GFFFactory',
+      -module     => 'GFFFactory',
+      -language   => 'python3',
+      -analysis_capacity => 1,
+      -max_retry_count => 0,
+      -rc_name    => 'default',
+      -meadow_type       => 'LSF',
+      -flow_into  => {
+        '2' => 'Create_GFF',
+      }
+    },
 
     {
       -logic_name => 'Create_GFF',
@@ -271,7 +283,7 @@ sub pipeline_analyses {
         gff_dir     => $self->o('gff_dir'),
         coverage    => $self->o('coverage'),
       },
-      -analysis_capacity => 10,
+      -hive_capacity => 10,
       -max_retry_count => 0,
       -rc_name    => 'bigmem',
       -meadow_type       => 'LSF',
@@ -289,7 +301,7 @@ sub pipeline_analyses {
         gff_dir     => $self->o('gff_dir'),
         coverage    => $self->o('coverage'),
       },
-      -analysis_capacity => 10,
+      -hive_capacity => 10,
       -max_retry_count => 0,
       -rc_name    => 'biggermem',
       -meadow_type       => 'LSF',
