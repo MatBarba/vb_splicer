@@ -17,7 +17,8 @@ class Tagger(eHive.BaseRunnable):
     def param_default(self):
         return {
                 rest_server: "https://www.vectorbase.org/rest",
-                do_donor_acceptor: False
+                do_donor_acceptor: False,
+                do_duplicates: False
         }
 
     def run(self):
@@ -38,9 +39,9 @@ class Tagger(eHive.BaseRunnable):
             return
 
         # Run it
-        Tagger.tag_splices(splice_db, gtf_file, species, rest_server, do_donor_acceptor)
+        Tagger.tag_splices(splice_db, gtf_file, species, rest_server, do_donor_acceptor, do_duplicates)
 
-    def tag_splices(input, gtf_path, species, rest_server, do_donor_acceptor):
+    def tag_splices(input, gtf_path, species, rest_server, do_donor_acceptor, do_duplicates):
         input_db = SpliceDB(input)
         input_db.detag()
 
@@ -56,6 +57,7 @@ class Tagger(eHive.BaseRunnable):
             'known': 0,
             'inbridge': 0,
             'outbridge': 0,
+            'duplicates': 0,
             'left': 0,
             'right': 0,
             'overlap': 0,
@@ -140,8 +142,13 @@ class Tagger(eHive.BaseRunnable):
 
                         # Links exons in different genes
                         else:
-                            stats['outbridge'] += 1
-                            splice.set_tag('outbridge')
+                            # Check for duplication!
+                            if do_duplicates and Tagger.check_duplicates(rest_server, left_gene, right_gene):
+                                stats['duplicates'] += 1
+                                splice.set_tag('duplicates')
+                            else:
+                                stats['outbridge'] += 1
+                                splice.set_tag('outbridge')
                             splice.set_gene(left_gene)
                             splice.set_gene2(right_gene)
                     elif left_gene:
@@ -220,6 +227,29 @@ class Tagger(eHive.BaseRunnable):
 
     def reverse_strand(seq):
         return seq.translate(str.maketrans('CGTA', 'GCAT'))[::-1]
+
+    def check_duplicates(rest_server, gene1, gene2):
+        paralogues = Tagger.get_paralogues(rest_server, gene1)
+        
+        # If the both genes are close paralogs (with >50% identity)
+        for para in paralogues:
+            target = para["target"]
+            if target["id"] == gene2 and float(target["perc_id"]) > 50:
+                return True
+        return False
+
+    def get_paralogues(rest_server, gene):
+        ext = "/homology/id/%s?" % gene
+        r = requests.get(rest_server + ext, headers={ "Content-Type" : "application/json"}, params={"type": "paralogues"})
+        
+        # Too bad if we fail, but not catastrophic
+        if not r.ok:
+            r.raise_for_status()
+        #    sys.exit()
+        
+        homologues = r.json()
+        return homologues["data"][0]['homologies']
+
 
     def get_introns(genes):
 

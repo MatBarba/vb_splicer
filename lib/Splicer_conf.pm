@@ -29,6 +29,7 @@ sub default_options {
     email => $ENV{USER} . '@ebi.ac.uk',
     rest_server => $self->o('rest_server'),
     do_donor_acceptor => 0,
+    do_duplicates => 0,
     
     # Species factory
     species => [],
@@ -236,6 +237,7 @@ sub pipeline_analyses {
         do_not_retag => $self->o('do_not_retag'),
         rest_server => $self->o('rest_server'),
         do_donor_acceptor => $self->o('do_donor_acceptor'),
+        do_duplicates => $self->o('do_duplicates'),
       },
       -analysis_capacity => 20,
       -max_retry_count => 0,
@@ -255,6 +257,7 @@ sub pipeline_analyses {
         do_not_retag => $self->o('do_not_retag'),
         rest_server => $self->o('rest_server'),
         do_donor_acceptor => $self->o('do_donor_acceptor'),
+        do_duplicates => $self->o('do_duplicates'),
       },
       -analysis_capacity => 20,
       -max_retry_count => 0,
