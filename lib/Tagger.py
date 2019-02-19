@@ -16,7 +16,8 @@ import requests, sys
 class Tagger(eHive.BaseRunnable):
     def param_default(self):
         return {
-                rest_server: "https://www.vectorbase.org/rest"
+                rest_server: "https://www.vectorbase.org/rest",
+                do_donor_acceptor: False
         }
 
     def run(self):
@@ -27,6 +28,7 @@ class Tagger(eHive.BaseRunnable):
         do_not_retag = self.param('do_not_retag')
         species = self.param('species')
         rest_server = self.param('rest_server')
+        do_donor_acceptor = self.param('do_donor_acceptor')
 
         if do_not_retag:
             return
@@ -36,9 +38,9 @@ class Tagger(eHive.BaseRunnable):
             return
 
         # Run it
-        Tagger.tag_splices(splice_db, gtf_file, species, rest_server)
+        Tagger.tag_splices(splice_db, gtf_file, species, rest_server, do_donor_acceptor)
 
-    def tag_splices(input, gtf_path, species, rest_server):
+    def tag_splices(input, gtf_path, species, rest_server, do_donor_acceptor):
         input_db = SpliceDB(input)
         input_db.detag()
 
@@ -56,8 +58,7 @@ class Tagger(eHive.BaseRunnable):
             'outbridge': 0,
             'left': 0,
             'right': 0,
-            'ingene': 0,
-            'outgene': 0,
+            'overlap': 0,
             'nocontact': 0
         }
 
@@ -82,21 +83,17 @@ class Tagger(eHive.BaseRunnable):
             nc += 1
             for splice in splices:
                 # Update sequence cache
-                if chrom != cur_chrom or cur_end < splice.end:
-                    cur_chrom = chrom
-                    cur_start = splice.start
-                    cur_end = cur_start + seq_cache_length
-                    cur_seq = Tagger.get_rest_sequence(rest_server, species, cur_chrom, cur_start, cur_end)
+                if do_donor_acceptor:
+                    if chrom != cur_chrom or cur_end < splice.end:
+                        cur_chrom = chrom
+                        cur_start = splice.start
+                        cur_end = cur_start + seq_cache_length
+                        cur_seq = Tagger.get_rest_sequence(rest_server, species, cur_chrom, cur_start, cur_end)
 
-                # Get donor/acceptor (if there is a direction)
-                if splice.strand != '.':
-                    donor, acceptor = Tagger.get_donor_acceptor(cur_seq, cur_start, splice)
-                    splice.set_donor_acceptor(donor, acceptor)
-
-                left_ok = introns.left_is_known(splice)
-                right_ok = introns.right_is_known(splice)
-                lefts = introns.get_left_splices(splice)
-                rights = introns.get_right_splices(splice)
+                    # Get donor/acceptor (if there is a direction)
+                    if splice.strand != '.':
+                        donor, acceptor = Tagger.get_donor_acceptor(cur_seq, cur_start, splice)
+                        splice.set_donor_acceptor(donor, acceptor)
 
                 # Check against known intron
                 if introns.is_known(splice):
@@ -109,37 +106,66 @@ class Tagger(eHive.BaseRunnable):
                     for tr in same.transcripts:
                         st_collection.add_known_intron(tr, splice.coverage)
 
-                elif left_ok and right_ok:
-                    if lefts[0].gene == rights[0].gene:
-                        stats['inbridge'] += 1
-                        splice.set_tag('inbridge')
-                        splice.set_gene(lefts[0].gene)
-                    else:
-                        stats['outbridge'] += 1
-                        splice.set_tag('outbridge')
-
-                elif left_ok:
-                    stats['left'] += 1
-                    splice.set_tag('left')
-                    splice.set_gene(lefts[0].gene)
-                elif right_ok:
-                    stats['right'] += 1
-                    splice.set_tag('right')
-                    splice.set_gene(rights[0].gene)
+                # Maybe the start/end of the splice touch a known exon?
                 else:
-                    overlap, gene = splice.gene_overlap(genes_intervals)
+                    # One side known from introns
+                    left_ok = introns.left_is_known(splice)
+                    right_ok = introns.right_is_known(splice)
+                    lefts = introns.get_left_splices(splice)
+                    rights = introns.get_right_splices(splice)
+                    # Or just to the left/right of a transcript (terminal exons)
+                    gene_to_the_right = st_collection.splice_to_the_left(splice)
+                    gene_to_the_left = st_collection.splice_to_the_right(splice)
+                    
+                    # Determine which gene touches the left/right sides
+                    left_gene = None
+                    right_gene = None
+                    if left_ok:
+                        left_gene = lefts[0].gene
+                    elif gene_to_the_left:
+                        left_gene = gene_to_the_left
+                    if right_ok:
+                        right_gene = rights[0].gene
+                    elif gene_to_the_right:
+                        right_gene = gene_to_the_right
+                    
+                    # Categorization of unknown splice junctions
+                    if left_gene and right_gene:
+                        # Links exons in the same gene
+                        if left_gene == right_gene:
+                            stats['inbridge'] += 1
+                            splice.set_tag('inbridge')
+                            splice.set_gene(left_gene)
+                            splice.set_gene2(right_gene)
 
-                    if overlap == 'in':
-                        splice.set_gene(gene.id)
-                        stats['ingene'] += 1
-                        splice.set_tag('ingene')
-                    elif overlap == 'out':
-                        splice.set_gene(gene.id)
-                        stats['outgene'] += 1
-                        splice.set_tag('outgene')
+                        # Links exons in different genes
+                        else:
+                            stats['outbridge'] += 1
+                            splice.set_tag('outbridge')
+                            splice.set_gene(left_gene)
+                            splice.set_gene2(right_gene)
+                    elif left_gene:
+                        stats['left'] += 1
+                        splice.set_tag('left')
+                        splice.set_gene(left_gene)
+                    elif right_gene:
+                        stats['right'] += 1
+                        splice.set_tag('right')
+                        splice.set_gene(right_gene)
+
+                    # Just an overlap?
                     else:
-                        stats['nocontact'] += 1
-                        splice.set_tag('nocontact')
+                        gene1, gene2 = splice.gene_overlap(genes_intervals)
+
+                        if gene1:
+                            splice.set_gene(gene1.id)
+                            stats['overlap'] += 1
+                            splice.set_tag('overlap')
+                            if gene2:
+                                splice.set_gene2(gene2.id)
+                        else:
+                            stats['nocontact'] += 1
+                            splice.set_tag('nocontact')
 
             # Store the tags back in the database
             input_db.tag_back(collection)

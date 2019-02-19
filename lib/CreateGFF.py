@@ -55,15 +55,16 @@ class CreateGFF(eHive.BaseRunnable):
         groups = {
             "all": [],
             "known": ["known"],
-            "unknown": ["inbridge", "outbridge", "left", "right", "ingene", "outgene", "nocontact"],
             "inbridge": ["inbridge"],
             "outbridge": ["outbridge"],
             "startends": ["left", "right"],
-            "ingene": ["ingene"],
-            "outgene": ["outgene"],
+            "overlap": ["overlap"],
             "nocontact": ["nocontact"],
             "connected": ["inbridge", "outbridge", "left", "right"],
-            "unconnected": ["ingene", "outgene", "nocontact"],
+            "unconnected": ["overlap", "nocontact"],
+        }
+        antigroups = {
+            "unknown": ["known"],
         }
 
         if category in groups:
@@ -72,6 +73,16 @@ class CreateGFF(eHive.BaseRunnable):
 
             logging.info("Writing group " + group)
             collection = input_db.get_collection(tags=tags, coverage=coverage)
+            CreateGFF.print_gff(collection, filename)
+        else:
+            logging.warn("Unknown category %s" % category)
+
+        if category in antigroups:
+            group = category
+            antitags = antigroups[category]
+
+            logging.info("Writing group " + group)
+            collection = input_db.get_collection(antitags=antitags, coverage=coverage)
             CreateGFF.print_gff(collection, filename)
         else:
             logging.warn("Unknown category %s" % category)

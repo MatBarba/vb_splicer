@@ -28,6 +28,7 @@ sub default_options {
     pipeline_name => 'vb_splicer',
     email => $ENV{USER} . '@ebi.ac.uk',
     rest_server => $self->o('rest_server'),
+    do_donor_acceptor => 0,
     
     # Species factory
     species => [],
@@ -234,6 +235,7 @@ sub pipeline_analyses {
       -parameters        => {
         do_not_retag => $self->o('do_not_retag'),
         rest_server => $self->o('rest_server'),
+        do_donor_acceptor => $self->o('do_donor_acceptor'),
       },
       -analysis_capacity => 20,
       -max_retry_count => 0,
@@ -252,6 +254,7 @@ sub pipeline_analyses {
       -parameters        => {
         do_not_retag => $self->o('do_not_retag'),
         rest_server => $self->o('rest_server'),
+        do_donor_acceptor => $self->o('do_donor_acceptor'),
       },
       -analysis_capacity => 20,
       -max_retry_count => 0,

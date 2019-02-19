@@ -167,6 +167,8 @@ class SpliceTranscriptCollection():
     def __init__(self, transcripts=[]):
         self.transcripts = []
         self.keys = {}
+        self.left_of_transcript = {}
+        self.right_of_transcript = {}
         self.size = 0
         self.add_transcripts(transcripts)
 
@@ -184,9 +186,39 @@ class SpliceTranscriptCollection():
 
             self.transcripts.append(transcript)
             self.keys[transcript.key] = i
+            
+            # Update border keys
+            self.add_left_key(transcript, i)
+            self.add_right_key(transcript, i)
 
             # Increment size only at the end
             self.size += 1
+
+    def add_left_key(self, transcript, index):
+        if transcript.chrom in self.left_of_transcript:
+            self.left_of_transcript[transcript.chrom][transcript.start] = index
+        else:
+            self.left_of_transcript[transcript.chrom] = { transcript.start: index }
+
+    def add_right_key(self, transcript, index):
+        if transcript.chrom in self.right_of_transcript:
+            self.right_of_transcript[transcript.chrom][transcript.end] = index
+        else:
+            self.right_of_transcript[transcript.chrom] = { transcript.end: index }
+
+    def splice_to_the_left(self, splice):
+        chrom = splice.chrom
+        if chrom in self.left_of_transcript:
+            if (splice.end + 1) in self.left_of_transcript[chrom]:
+                index = self.left_of_transcript[chrom][splice.end+1]
+                return self.transcripts[index].gene
+
+    def splice_to_the_right(self, splice):
+        chrom = splice.chrom
+        if chrom in self.right_of_transcript:
+            if (splice.start - 1) in self.right_of_transcript[chrom]:
+                index = self.right_of_transcript[chrom][splice.start-1]
+                return self.transcripts[index].gene
 
     def get_transcripts(self):
         return self.transcripts
@@ -237,10 +269,10 @@ class Splice():
     """Splice junction found in a read"""
 
     sql_fields = ('chrom', 'start', 'end', 'strand',
-                  'left_flank', 'right_flank', 'coverage', 'tag', 'non_canonical', 'gene')
+                  'left_flank', 'right_flank', 'coverage', 'tag', 'non_canonical', 'gene', 'gene2')
 
     def __init__(self, chrom, start, end, strand='.',
-                 left_flank=1, right_flank=1, coverage=1, tag=None, non_canonical=None, gene=None, id=None, transcripts=[]):
+                 left_flank=1, right_flank=1, coverage=1, tag=None, non_canonical=None, gene=None, gene2=None, id=None, transcripts=[]):
         self.chrom = chrom
         self.start = start
         self.end = end
@@ -254,6 +286,7 @@ class Splice():
         self.non_canonical = non_canonical
         self.id = id
         self.gene = gene
+        self.gene2 = gene2
         self.transcripts = transcripts
 
         # Generate keys
@@ -512,6 +545,9 @@ class Splice():
     def set_gene(self, gene):
         self.gene = gene
 
+    def set_gene2(self, gene):
+        self.gene2 = gene
+
     def is_in_gene(self, genes):
         """If the splice is completely within a gene"""
         for gene in genes:
@@ -542,36 +578,15 @@ class Splice():
             intersecter = genes_intervals[self.chrom]
             genes = intersecter.find(self.start, self.end)
 
-            if len(genes) > 0:
-                # Just one gene? Take the first one
-                gene = genes[0]
-
-                left_included = (self.start >= gene.start and self.start <= gene.end and self.strand == gene.strand)
-                right_included = (self.end >= gene.start and self.end <= gene.end and self.strand == gene.strand)
-                if left_included and right_included:
-                    return 'in', gene
-                else:
-                    return 'out', gene
-
+            if len(genes) == 1:
+                return genes[0], None
+            elif len(genes) > 1:
+                return genes[0], genes[1]
             else:
-                return 'no', None
+                return None, None
         else:
-            return 'no', None
+            return None, None
 
-        for gene in genes:
-            left = self.start - self.left_flank
-            right = self.end + self.right_flank
-
-            left_included = (left >= gene.start and left <= gene.end)
-            right_included = (right >= gene.start and right <= gene.end)
-            if self.chrom == gene.chrom:
-                if left_included ^ right_included:
-                    return 'out', gene.id
-                elif left_included and right_included:
-                    return 'in', gene.id
-
-        return 'no', None
-        
 
 class SpliceCollection():
     """Cllection of splices"""
@@ -694,7 +709,8 @@ class SpliceDB():
                     coverage int,
                     tag text,
                     non_canonical text,
-                    gene text
+                    gene text,
+                    gene2 text
                 )''')
         c.execute('''CREATE INDEX chrom_idx ON splices (chrom);''')
         c.execute('''CREATE INDEX tag_idx ON splices (tag);''')
@@ -793,15 +809,15 @@ class SpliceDB():
             c.execute(sql, values)
         conn.commit()
 
-    def get_collection(self, chrom='', chroms=[], tags=[], coverage=1):
+    def get_collection(self, chrom='', chroms=[], tags=[], antitags=[], coverage=1):
         """Retrieve a SpliceCollection from the SpliceDB"""
 
-        splices = self.get_splices(chrom, chroms, tags, coverage)
+        splices = self.get_splices(chrom, chroms, tags, antitags, coverage)
         col = SpliceCollection(splices)
 
         return col
 
-    def get_splices(self, chrom='', chroms=[], tags=[], coverage=1):
+    def get_splices(self, chrom='', chroms=[], tags=[], antitags=[], coverage=1):
         """Retrieve a raw list of splices from the SpliceDB"""
         conn = self.get_connection()
         c = conn.cursor()
@@ -826,13 +842,20 @@ class SpliceDB():
 
             conditions.append("(" + " OR ".join(chrom_condition) + ")")
         if len(tags) > 0:
-            tags_cond = "tag=?"
             tag_condition = []
             for tag in tags:
-                tag_condition.append(tags_cond)
+                tag_condition.append('?')
                 data.append(tag)
 
-            conditions.append("(" + " OR ".join(tag_condition) + ")")
+            conditions.append("tag IN (" + ", ".join(tag_condition) + ")")
+
+        if len(antitags) > 0:
+            tag_condition = []
+            for tag in antitags:
+                tag_condition.append('?')
+                data.append(tag)
+
+            conditions.append("tag NOT IN (" + ", ".join(tag_condition) + ")")
         if coverage > 1:
             conditions.append("s.coverage>=?")
             data.append(coverage)
@@ -865,6 +888,7 @@ class SpliceDB():
                 tag=s['tag'],
                 non_canonical=s['non_canonical'],
                 gene=s['gene'],
+                gene2=s['gene2'],
                 id=s['ROWID']
             )
             splices.append(splice)
@@ -875,7 +899,7 @@ class SpliceDB():
         conn = self.get_connection()
         c = conn.cursor()
 
-        c.execute('''UPDATE splices set tag=NULL, gene=NULL, non_canonical=NULL''')
+        c.execute('''UPDATE splices set tag=NULL, gene=NULL, gene2=NULL, non_canonical=NULL''')
 
     def tag_back(self, collection):
         """Apply the tags of splices back to database"""
@@ -890,12 +914,10 @@ class SpliceDB():
         conn.commit()
 
     def tag_splice(self, splice, cursor):
-        values = [splice.tag, splice.non_canonical, splice.gene, splice.id]
-        fields = ",".join(["tag", "non_canonical", "gene", "ROWID"])
+        values = [splice.tag, splice.non_canonical, splice.gene, splice.gene2, splice.id]
+        fields = ",".join(["tag", "non_canonical", "gene", "gene2", "ROWID"])
         conditions = "ROWID=?"
-        sql = "UPDATE splices SET tag=?, non_canonical=?, gene=? WHERE " + conditions
-        #logging.debug(sql)
-        #logging.debug(values)
+        sql = "UPDATE splices SET tag=?, non_canonical=?, gene=?, gene2=? WHERE " + conditions
         cursor.execute(sql, values)
 
     def add_genes_collection(self, sg_collection):
