@@ -574,18 +574,21 @@ class Splice():
                 return gene.id
 
     def gene_overlap(self, genes_intervals):
+        left_gene, right_gene = None, None
+
         if self.chrom in genes_intervals:
             intersecter = genes_intervals[self.chrom]
-            genes = intersecter.find(self.start, self.end)
+            genes_start = intersecter.find(self.start - self.left_flank, self.start)
+            genes_end = intersecter.find(self.end, self.end + self.right_flank)
+            
+            if len(genes_start) >= 1:
+                left_gene = genes_start[0].id
+            if len(genes_end) >= 1:
+                right_gene = genes_end[0].id
+        if left_gene == right_gene:
+            right_gene = None
 
-            if len(genes) == 1:
-                return genes[0], None
-            elif len(genes) > 1:
-                return genes[0], genes[1]
-            else:
-                return None, None
-        else:
-            return None, None
+        return left_gene, right_gene
 
 
 class SpliceCollection():

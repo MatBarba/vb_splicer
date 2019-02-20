@@ -14,6 +14,7 @@ class GFFFactory(eHive.BaseRunnable):
                 { "category": 'unknown', "coverage": 10 },
                 { "category": 'unknown', "coverage": 100 },
                 { "category": 'unknown', "coverage": 1000 },
+                { "category": 'duplicates', "coverage": 1 },
         ]
 
         for output in outputs:

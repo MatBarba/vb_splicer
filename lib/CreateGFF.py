@@ -62,9 +62,10 @@ class CreateGFF(eHive.BaseRunnable):
             "nocontact": ["nocontact"],
             "connected": ["inbridge", "outbridge", "left", "right"],
             "unconnected": ["overlap", "nocontact"],
+            "duplicates": ["duplicates"],
         }
         antigroups = {
-            "unknown": ["known"],
+            "unknown": ["known", "duplicates"],
         }
 
         if category in groups:

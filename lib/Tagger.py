@@ -14,6 +14,8 @@ import os
 import requests, sys
 
 class Tagger(eHive.BaseRunnable):
+    para_cache = {}
+
     def param_default(self):
         return {
                 rest_server: "https://www.vectorbase.org/rest",
@@ -30,6 +32,7 @@ class Tagger(eHive.BaseRunnable):
         species = self.param('species')
         rest_server = self.param('rest_server')
         do_donor_acceptor = self.param('do_donor_acceptor')
+        do_duplicates = self.param('do_duplicates')
 
         if do_not_retag:
             return
@@ -164,12 +167,24 @@ class Tagger(eHive.BaseRunnable):
                     else:
                         gene1, gene2 = splice.gene_overlap(genes_intervals)
 
-                        if gene1:
-                            splice.set_gene(gene1.id)
-                            stats['overlap'] += 1
+                        if gene1 and gene2:
+                            splice.set_gene(gene1)
+                            splice.set_gene2(gene2)
+                            if do_duplicates and Tagger.check_duplicates(rest_server, gene1, gene2):
+                                stats['duplicates'] += 1
+                                splice.set_tag('duplicates')
+                            else:
+                                splice.set_tag('overlap')
+                                stats['overlap'] += 1
+
+                        elif gene1:
+                            splice.set_gene(gene1)
                             splice.set_tag('overlap')
-                            if gene2:
-                                splice.set_gene2(gene2.id)
+                            stats['overlap'] += 1
+                        elif gene2:
+                            splice.set_gene(gene2)
+                            splice.set_tag('overlap')
+                            stats['overlap'] += 1
                         else:
                             stats['nocontact'] += 1
                             splice.set_tag('nocontact')
@@ -229,14 +244,29 @@ class Tagger(eHive.BaseRunnable):
         return seq.translate(str.maketrans('CGTA', 'GCAT'))[::-1]
 
     def check_duplicates(rest_server, gene1, gene2):
+        # Check para cache
+        if gene1 in Tagger.para_cache and gene2 in Tagger.para_cache[gene1]:
+            return Tagger.para_cache[gene1][gene2]
+
         paralogues = Tagger.get_paralogues(rest_server, gene1)
+        if paralogues is None:
+            return False
         
-        # If the both genes are close paralogs (with >50% identity)
+        # If the both genes are close paralogs (with >50% similarity)
+        is_duplicate = False
         for para in paralogues:
             target = para["target"]
-            if target["id"] == gene2 and float(target["perc_id"]) > 50:
-                return True
-        return False
+            if target["id"] == gene2 and float(target["perc_pos"]) > 50:
+                is_duplicate = True
+                break
+
+        # Keep in cache
+        if gene1 in Tagger.para_cache:
+            Tagger.para_cache[gene1][gene2] = is_duplicate
+        else:
+            Tagger.para_cache[gene1] = { gene2: is_duplicate }
+            
+        return is_duplicate
 
     def get_paralogues(rest_server, gene):
         ext = "/homology/id/%s?" % gene
@@ -248,7 +278,10 @@ class Tagger(eHive.BaseRunnable):
         #    sys.exit()
         
         homologues = r.json()
-        return homologues["data"][0]['homologies']
+        if "data" in homologues and len(homologues["data"]) == 1:
+            return homologues["data"][0]['homologies']
+        else:
+            return None
 
 
     def get_introns(genes):
