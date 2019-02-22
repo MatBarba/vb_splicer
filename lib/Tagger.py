@@ -77,7 +77,7 @@ class Tagger(eHive.BaseRunnable):
         cur_seq = ''
         seq_cache_length = 1000000
 
-        nc = 0
+        nc = 1
 
         for chrom in chroms.keys():
             collection = input_db.get_collection(chroms=[chrom])
@@ -244,29 +244,28 @@ class Tagger(eHive.BaseRunnable):
         return seq.translate(str.maketrans('CGTA', 'GCAT'))[::-1]
 
     def check_duplicates(rest_server, gene1, gene2):
+        duplicates = {}
+
         # Check para cache
-        if gene1 in Tagger.para_cache and gene2 in Tagger.para_cache[gene1]:
-            return Tagger.para_cache[gene1][gene2]
-
-        paralogues = Tagger.get_paralogues(rest_server, gene1)
-        if paralogues is None:
-            return False
-        
-        # If the both genes are close paralogs (with >50% similarity)
-        is_duplicate = False
-        for para in paralogues:
-            target = para["target"]
-            if target["id"] == gene2 and float(target["perc_pos"]) > 50:
-                is_duplicate = True
-                break
-
-        # Keep in cache
         if gene1 in Tagger.para_cache:
-            Tagger.para_cache[gene1][gene2] = is_duplicate
+            duplicates = Tagger.para_cache[gene1]
         else:
-            Tagger.para_cache[gene1] = { gene2: is_duplicate }
-            
-        return is_duplicate
+            # Get gene1 paralogs
+            paralogues = Tagger.get_paralogues(rest_server, gene1)
+            if paralogues is not None:
+                # If the both genes are close paralogs (with >50% similarity)
+                for para in paralogues:
+                    target = para["target"]
+                    if float(target["perc_pos"]) > 50:
+                        duplicates[target["id"]] = True
+
+            # Store in cache
+            Tagger.para_cache[gene1] = duplicates
+        
+        if gene2 in duplicates:
+            return True
+        else:
+            return False
 
     def get_paralogues(rest_server, gene):
         ext = "/homology/id/%s?" % gene

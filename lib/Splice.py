@@ -901,8 +901,9 @@ class SpliceDB():
     def detag(self):
         conn = self.get_connection()
         c = conn.cursor()
-
-        c.execute('''UPDATE splices set tag=NULL, gene=NULL, gene2=NULL, non_canonical=NULL''')
+        
+        # Remove all tags/genes, but not non_canonical because it is sequence related only
+        c.execute('''UPDATE splices set tag=NULL, gene=NULL, gene2=NULL''')
 
     def tag_back(self, collection):
         """Apply the tags of splices back to database"""
