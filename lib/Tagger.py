@@ -10,6 +10,7 @@ from bx.intervals.intersection import Interval, IntervalTree
 
 import eHive
 import os
+import csv
 
 import requests, sys
 
@@ -19,8 +20,7 @@ class Tagger(eHive.BaseRunnable):
     def param_default(self):
         return {
                 rest_server: "https://www.vectorbase.org/rest",
-                do_donor_acceptor: False,
-                do_duplicates: False
+                do_donor_acceptor: False
         }
 
     def run(self):
@@ -32,7 +32,7 @@ class Tagger(eHive.BaseRunnable):
         species = self.param('species')
         rest_server = self.param('rest_server')
         do_donor_acceptor = self.param('do_donor_acceptor')
-        do_duplicates = self.param('do_duplicates')
+        paralogs_dir = self.param('paralogs_dir')
 
         if do_not_retag:
             return
@@ -42,9 +42,9 @@ class Tagger(eHive.BaseRunnable):
             return
 
         # Run it
-        Tagger.tag_splices(splice_db, gtf_file, species, rest_server, do_donor_acceptor, do_duplicates)
+        Tagger.tag_splices(splice_db, gtf_file, species, rest_server, do_donor_acceptor, paralogs_dir)
 
-    def tag_splices(input, gtf_path, species, rest_server, do_donor_acceptor, do_duplicates):
+    def tag_splices(input, gtf_path, species, rest_server, do_donor_acceptor, paralogs_dir):
         input_db = SpliceDB(input)
         input_db.detag()
 
@@ -146,7 +146,7 @@ class Tagger(eHive.BaseRunnable):
                         # Links exons in different genes
                         else:
                             # Check for duplication!
-                            if do_duplicates and Tagger.check_duplicates(rest_server, left_gene, right_gene):
+                            if paralogs_dir and Tagger.check_duplicates(paralogs_dir, species, left_gene, right_gene):
                                 stats['duplicates'] += 1
                                 splice.set_tag('duplicates')
                             else:
@@ -170,7 +170,7 @@ class Tagger(eHive.BaseRunnable):
                         if gene1 and gene2:
                             splice.set_gene(gene1)
                             splice.set_gene2(gene2)
-                            if do_duplicates and Tagger.check_duplicates(rest_server, gene1, gene2):
+                            if paralogs_dir and Tagger.check_duplicates(paralogs_dir, species, gene1, gene2):
                                 stats['duplicates'] += 1
                                 splice.set_tag('duplicates')
                             else:
@@ -243,45 +243,33 @@ class Tagger(eHive.BaseRunnable):
     def reverse_strand(seq):
         return seq.translate(str.maketrans('CGTA', 'GCAT'))[::-1]
 
-    def check_duplicates(rest_server, gene1, gene2):
+    def check_duplicates(paralogs_dir, species, gene1, gene2):
         duplicates = {}
 
         # Check para cache
-        if gene1 in Tagger.para_cache:
-            duplicates = Tagger.para_cache[gene1]
-        else:
+        if len(Tagger.para_cache) == 0:
             # Get gene1 paralogs
-            paralogues = Tagger.get_paralogues(rest_server, gene1)
-            if paralogues is not None:
-                # If the both genes are close paralogs (with >50% similarity)
-                for para in paralogues:
-                    target = para["target"]
-                    if float(target["perc_pos"]) > 50:
-                        duplicates[target["id"]] = True
+            paralogues = Tagger.get_species_paralogues(paralogs_dir, species)
+            Tagger.para_cache = paralogues
 
-            # Store in cache
-            Tagger.para_cache[gene1] = duplicates
-        
-        if gene2 in duplicates:
+        if gene1 in Tagger.para_cache and gene2 in Tagger.para_cache[gene1]:
             return True
         else:
             return False
 
-    def get_paralogues(rest_server, gene):
-        ext = "/homology/id/%s?" % gene
-        r = requests.get(rest_server + ext, headers={ "Content-Type" : "application/json"}, params={"type": "paralogues"})
+    def get_species_paralogues(paralogs_dir, species):
+        para_file = paralogs_dir + "/" + species + ".txt"
+        if not os.path.exists(para_file):
+            return {}
         
-        # Too bad if we fail, but not catastrophic
-        if not r.ok:
-            r.raise_for_status()
-        #    sys.exit()
-        
-        homologues = r.json()
-        if "data" in homologues and len(homologues["data"]) == 1:
-            return homologues["data"][0]['homologies']
-        else:
-            return None
-
+        paras = {}
+        with open(para_file, 'r') as para_lines:
+            for line in csv.reader(para_lines, delimiter="\t"):
+                gene1, gene2 = line[0], line[1]
+                if gene1 not in paras:
+                    paras[gene1] = {}
+                paras[gene1][gene2] = True
+        return paras
 
     def get_introns(genes):
 

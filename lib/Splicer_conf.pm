@@ -27,9 +27,12 @@ sub default_options {
 
     pipeline_name => 'vb_splicer',
     email => $ENV{USER} . '@ebi.ac.uk',
-    rest_server => $self->o('rest_server'),
+
     do_donor_acceptor => 0,
-    do_duplicates => 0,
+    rest_server => undef,
+    do_paralogs => 0,
+    homologs_dir => undef,
+    paralogs_dir => undef,
     
     # Species factory
     species => [],
@@ -66,11 +69,11 @@ sub pipeline_analyses {
       -module     => 'Bio::EnsEMBL::Hive::RunnableDB::Dummy',
       -input_ids  => [{}],
       -flow_into  => {
-        '1->A' => 'Species_factory',
+        '1->A' => 'Para_parser',
         'A->1' => 'Email_report',
       },
-      -rc_name    => 'default',
-      -meadow_type       => 'LOCAL',
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
     },
 
     {
@@ -79,8 +82,23 @@ sub pipeline_analyses {
       -parameters => {
         email => $self->o('email'),
       },
-      -rc_name    => 'default',
-      -meadow_type       => 'LOCAL',
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
+    },
+
+    {
+      -logic_name => 'Para_parser',
+      -module            => 'ParaParser',
+      -language   => 'python3',
+      -parameters => {
+        do_paralogs      => $self->o('do_paralogs'),
+        homologs_dir      => $self->o('homologs_dir'),
+        paralogs_dir      => $self->o('paralogs_dir'),
+      },
+      -flow_into  => 'Species_factory',
+      -max_retry_count => 0,
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
     },
 
     {
@@ -92,12 +110,12 @@ sub pipeline_analyses {
         run_all      => $self->o('run_all'),
         meta_filters => {},
       },
-      -meadow_type       => 'LOCAL',
       -max_retry_count => 0,
-      -rc_name    => 'default',
       -flow_into  => {
         '2' => 'SpeciesFilter',
       },
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
     },
 
     {
@@ -107,23 +125,23 @@ sub pipeline_analyses {
       -parameters => {
         bam_dir => $self->o('bam_dir'),
       },
-      -rc_name    => 'default',
-      -meadow_type       => 'LOCAL',
       -flow_into  => {
         '2->A' => 'GTF_factory',
         'A->2' => 'Report',
       },
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
     },
 
     {
       -logic_name => 'Report',
       -module            => 'Report',
       -language   => 'python3',
-      -rc_name    => 'default',
-      -meadow_type       => 'LOCAL',
       -flow_into  => {
         '2' => '?accu_name=reports&accu_address={species}&accu_input_variable=report',
       },
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
     },
 
     {
@@ -137,12 +155,12 @@ sub pipeline_analyses {
       },
       -max_retry_count   => 0,
       -failed_job_tolerance => 0,
-      -meadow_type       => 'LOCAL',
-      -rc_name           => 'default',
       -flow_into  => {
         '2->A' => 'GTF_dumper',
         'A->3' => 'SpliceDB_factory',
       },
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
     },
 
     {
@@ -167,31 +185,30 @@ sub pipeline_analyses {
       -parameters        => {
         bam_dir     => $self->o('bam_dir'),
         splice_dir     => $self->o('splice_dir'),
+        force_splice_db => $self->o('force_splice_db'),
       },
       -max_retry_count   => 0,
-      -meadow_type       => 'LOCAL',
-      -rc_name           => 'default',
       -flow_into  => {
         '2->A' => 'Extract_splices',
-        'A->1' => 'Merge_splices',
+        'A->3' => 'Merge_splices',
+        '3' => 'Merge_splices',
       },
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
     },
 
     {
       -logic_name => 'Extract_splices',
       -module     => 'ExtractSplices',
       -language   => 'python3',
-      -parameters        => {
-        force_splice_db => $self->o('force_splice_db'),
-      },
       
       -analysis_capacity => 30,
       -max_retry_count => 0,
       -meadow_type       => 'LSF',
       -rc_name    => 'bigmem',
-      -flow_into  => {
-        '1' => '?accu_name=splice_dbs&accu_address={species}[]&accu_input_variable=splice_db',
-      }   
+      #-flow_into  => {
+      #  '1' => '?accu_name=splice_dbs&accu_address={species}[]&accu_input_variable=splice_db',
+      #}   
     },
  
     {
@@ -234,10 +251,10 @@ sub pipeline_analyses {
       -module     => 'Tagger',
       -language   => 'python3',
       -parameters        => {
+        paralogs_dir =>  $self->o('paralogs_dir'),
         do_not_retag => $self->o('do_not_retag'),
         rest_server => $self->o('rest_server'),
         do_donor_acceptor => $self->o('do_donor_acceptor'),
-        do_duplicates => $self->o('do_duplicates'),
       },
       -analysis_capacity => 20,
       -max_retry_count => 0,
@@ -254,10 +271,10 @@ sub pipeline_analyses {
       -module     => 'Tagger',
       -language   => 'python3',
       -parameters        => {
+        paralogs_dir =>  $self->o('paralogs_dir'),
         do_not_retag => $self->o('do_not_retag'),
         rest_server => $self->o('rest_server'),
         do_donor_acceptor => $self->o('do_donor_acceptor'),
-        do_duplicates => $self->o('do_duplicates'),
       },
       -analysis_capacity => 20,
       -max_retry_count => 0,
@@ -274,11 +291,11 @@ sub pipeline_analyses {
       -language   => 'python3',
       -analysis_capacity => 1,
       -max_retry_count => 0,
-      -rc_name    => 'default',
-      -meadow_type       => 'LSF',
       -flow_into  => {
         '2' => 'Create_GFF',
-      }
+      },
+      -rc_name    => 'bigmem',
+      -meadow_type       => 'LSF',
     },
 
     {

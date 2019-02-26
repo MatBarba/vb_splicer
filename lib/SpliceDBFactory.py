@@ -1,4 +1,5 @@
 import os
+import os.path
 import eHive
 
 
@@ -10,6 +11,7 @@ class SpliceDBFactory(eHive.BaseRunnable):
         species = self.param_required('species')
         bam_dir = self.param_required('bam_dir')
         splice_dir = self.param_required('splice_dir')
+        force_splice_db = self.param_required('force_splice_db')
 
         # Prepare the splice dirs
         splice_species_dir = os.path.join(splice_dir, species)
@@ -23,6 +25,7 @@ class SpliceDBFactory(eHive.BaseRunnable):
             bams = filter(
                 lambda x: x.endswith('.bam'), os.listdir(bam_species_dir)
             )
+            splice_dbs = []
 
             for bam_file in bams:
                 bam_path = os.path.join(bam_species_dir, bam_file)
@@ -32,7 +35,15 @@ class SpliceDBFactory(eHive.BaseRunnable):
                 splice_filename = splice_filename.replace('.bam', '.sqlite')
                 splice_db = os.path.join(splice_species_dir, splice_filename)
 
-                self.dataflow({
-                    'bam_file': bam_path,
-                    'splice_db': splice_db
-                }, 2)
+                # Check if the splice_db exists already
+                if force_splice_db or not os.path.exists(splice_db):
+                    self.dataflow({
+                        'bam_file': bam_path,
+                        'splice_db': splice_db
+                    }, 2)
+                splice_dbs.append(splice_db)
+            
+            self.dataflow({
+                'splice_dbs': splice_dbs
+            }, 3)
+
