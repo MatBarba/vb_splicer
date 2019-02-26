@@ -585,8 +585,8 @@ class Splice():
                 left_gene = genes_start[0].id
             if len(genes_end) >= 1:
                 right_gene = genes_end[0].id
-        if left_gene == right_gene:
-            right_gene = None
+        #if left_gene == right_gene:
+        #    right_gene = None
 
         return left_gene, right_gene
 

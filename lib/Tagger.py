@@ -64,7 +64,10 @@ class Tagger(eHive.BaseRunnable):
             'left': 0,
             'right': 0,
             'overlap': 0,
-            'nocontact': 0
+            'nocontact': 0,
+            'outgene_left': 0,
+            'outgene_right': 0,
+            'ingene': 0,
         }
 
         logging.info("Get chroms from db")
@@ -101,93 +104,75 @@ class Tagger(eHive.BaseRunnable):
                         splice.set_donor_acceptor(donor, acceptor)
 
                 # Check against known intron
+                tag = 'unknown'
                 if introns.is_known(splice):
                     same = introns.get_same_splice(splice)
-
-                    stats['known'] += 1
-                    splice.set_tag('known')
+                    
+                    tag = 'known'
                     splice.set_gene(same.gene)
+
+                    # Record this intron in the genes and transcripts table
                     sg_collection.add_known_intron(same.gene, splice.coverage)
                     for tr in same.transcripts:
                         st_collection.add_known_intron(tr, splice.coverage)
 
-                # Maybe the start/end of the splice touch a known exon?
+                # Check overlaps etc. otherwise
                 else:
-                    # One side known from introns
-                    left_ok = introns.left_is_known(splice)
-                    right_ok = introns.right_is_known(splice)
-                    lefts = introns.get_left_splices(splice)
-                    rights = introns.get_right_splices(splice)
-                    # Or just to the left/right of a transcript (terminal exons)
-                    gene_to_the_right = st_collection.splice_to_the_left(splice)
-                    gene_to_the_left = st_collection.splice_to_the_right(splice)
+                    # Do start and end overlap with some genes?
+                    gene1, gene2 = splice.gene_overlap(genes_intervals)
                     
-                    # Determine which gene touches the left/right sides
-                    left_gene = None
-                    right_gene = None
-                    if left_ok:
-                        left_gene = lefts[0].gene
-                    elif gene_to_the_left:
-                        left_gene = gene_to_the_left
-                    if right_ok:
-                        right_gene = rights[0].gene
-                    elif gene_to_the_right:
-                        right_gene = gene_to_the_right
-                    
-                    # Categorization of unknown splice junctions
-                    if left_gene and right_gene:
-                        # Links exons in the same gene
-                        if left_gene == right_gene:
-                            stats['inbridge'] += 1
-                            splice.set_tag('inbridge')
-                            splice.set_gene(left_gene)
-                            splice.set_gene2(right_gene)
+                    # Start or end overlap
+                    if gene1 or gene2:
 
-                        # Links exons in different genes
-                        else:
-                            # Check for duplication!
-                            if paralogs_dir and Tagger.check_duplicates(paralogs_dir, species, left_gene, right_gene):
-                                stats['duplicates'] += 1
-                                splice.set_tag('duplicates')
-                            else:
-                                stats['outbridge'] += 1
-                                splice.set_tag('outbridge')
-                            splice.set_gene(left_gene)
-                            splice.set_gene2(right_gene)
-                    elif left_gene:
-                        stats['left'] += 1
-                        splice.set_tag('left')
-                        splice.set_gene(left_gene)
-                    elif right_gene:
-                        stats['right'] += 1
-                        splice.set_tag('right')
-                        splice.set_gene(right_gene)
+                        # Identify gene touching an intron from the left
+                        left_gene = st_collection.splice_to_the_left(splice)
+                        if introns.left_is_known(splice):
+                            left_gene = introns.get_left_splices(splice)[0].gene
+                        # Identify gene touching an intron from the right
+                        right_gene = st_collection.splice_to_the_right(splice)
+                        if introns.right_is_known(splice):
+                            right_gene = introns.get_right_splices(splice)[0].gene
 
-                    # Just an overlap?
-                    else:
-                        gene1, gene2 = splice.gene_overlap(genes_intervals)
-
+                        # Both overlap
                         if gene1 and gene2:
-                            splice.set_gene(gene1)
-                            splice.set_gene2(gene2)
-                            if paralogs_dir and Tagger.check_duplicates(paralogs_dir, species, gene1, gene2):
-                                stats['duplicates'] += 1
-                                splice.set_tag('duplicates')
+                            # Both start and end overlap the same gene
+                            if gene1 == gene2:
+                                tag = 'ingene'
+                                splice.set_gene(gene1)
+
+                                if left_gene is not None and right_gene is not None:
+                                    tag = 'inbridge'
+                                elif left_gene is not None:
+                                    tag = 'left'
+                                elif right_gene is not None:
+                                    tag = 'right'
+
+                            # The genes overlapped by start and end are different
                             else:
-                                splice.set_tag('overlap')
-                                stats['overlap'] += 1
+                                splice.set_gene(gene1)
+                                splice.set_gene2(gene2)
+                                tag = 'overlap'
+
+                                # The overlap starts and ends at the end and starts of exons
+                                if left_gene is not None and right_gene is not None:
+                                    tag = 'outbridge'
+
+                                # Check duplicates using paralogy
+                                if paralogs_dir and Tagger.check_duplicates(paralogs_dir, species, gene1, gene2):
+                                    tag = 'duplicates'
 
                         elif gene1:
                             splice.set_gene(gene1)
-                            splice.set_tag('overlap')
-                            stats['overlap'] += 1
+                            tag = 'outgene_right'
                         elif gene2:
                             splice.set_gene(gene2)
-                            splice.set_tag('overlap')
-                            stats['overlap'] += 1
-                        else:
-                            stats['nocontact'] += 1
-                            splice.set_tag('nocontact')
+                            tag = 'outgene_left'
+                    # No overlap
+                    else:
+                        tag = 'nocontact'
+
+                stats[tag] += 1
+                splice.set_tag(tag)
 
             # Store the tags back in the database
             input_db.tag_back(collection)
