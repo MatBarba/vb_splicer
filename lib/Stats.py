@@ -15,13 +15,19 @@ class Stats(eHive.BaseRunnable):
                 "SELECT count(*) FROM genes",
             'genes_without_intron':
                 "SELECT count(*) FROM genes WHERE introns=0",
-            'genes_covered':
-                "SELECT count(*) FROM genes WHERE introns=covered_introns",
-            'genes_covered_10':
-                "SELECT count(*) FROM genes WHERE introns=covered_introns AND splice_coverage >= 10",
+            'genes_completely_covered':
+                "SELECT count(*) FROM genes WHERE introns=covered_introns AND introns > 0",
+            'genes_completely_covered_10':
+                "SELECT count(*) FROM genes WHERE introns=covered_introns AND introns > 0 AND splice_coverage >= 10",
+            'genes_partially_covered':
+                "SELECT count(*) FROM genes WHERE covered_introns > 0 AND covered_introns < introns AND introns > 0",
+            'genes_not_covered':
+                "SELECT count(*) FROM genes WHERE covered_introns = 0 AND introns > 0",
             'introns':
                 "SELECT sum(introns) FROM genes",
             'known_introns': 
+                "SELECT SUM(covered_introns) FROM genes",
+            'known_introns_%': 
                 "SELECT SUM(covered_introns)*1.0/sum(introns) FROM genes",
             'known_introns_coverage': 
                 "SELECT sum(splice_coverage)*1.0/sum(covered_introns) FROM genes",
@@ -34,11 +40,14 @@ class Stats(eHive.BaseRunnable):
             'db',
             'genes',
             'genes_without_intron',
-            'genes_covered',
-            'genes_covered_10',
+            'genes_completely_covered',
+            'genes_completely_covered_10',
+            'genes_partially_covered',
+            'genes_not_covered',
             'introns',
 #            'splices',
             'known_introns',
+            'known_introns_%',
             'known_introns_coverage',
 #            'genes_with_weak_splices'
             ]
