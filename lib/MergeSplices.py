@@ -27,13 +27,10 @@ class MergeSplices(eHive.BaseRunnable):
         merged_db = os.path.join(splice_dir, species + '.sqlite')
 
         # Run it!
-        if species in splice_dbs:
-            if force_merge or not os.path.exists(merged_db):
-                self.merge_dbs(merged_db, splice_dbs[species])
-            else:
-                logging.info("Splice db %s exists: reusing" % merged_db)
+        if force_merge or not os.path.exists(merged_db):
+            self.merge_dbs(merged_db, splice_dbs)
         else:
-            self.warning("Can't find %s among the splice dbs species" % species)
+            logging.info("Splice db %s exists: reusing" % merged_db)
 
         self.dataflow({
             'splice_db': merged_db
