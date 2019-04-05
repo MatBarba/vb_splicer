@@ -140,6 +140,7 @@ sub pipeline_analyses {
       -flow_into  => {
         '2' => '?accu_name=reports&accu_address={species}&accu_input_variable=report',
       },
+      -analysis_capacity => 1,
       -rc_name    => 'normal',
       -meadow_type       => 'LSF',
     },
@@ -261,7 +262,7 @@ sub pipeline_analyses {
       -rc_name    => 'bigmem',
       -meadow_type       => 'LSF',
       -flow_into  => {
-        '1' => 'GFFFactory',
+        '1' => 'Output_factory',
         '-1' => 'Tagger_highmem',
       }
     },
@@ -281,20 +282,27 @@ sub pipeline_analyses {
       -rc_name    => 'biggermem',
       -meadow_type       => 'LSF',
       -flow_into  => {
-        '1' => 'GFFFactory',
+        '1' => 'Output_factory',
       }
     },
 
     {
-      -logic_name => 'GFFFactory',
-      -module     => 'GFFFactory',
+      -logic_name => 'Output_factory',
+      -module     => 'OutputFactory',
       -language   => 'python3',
-      -analysis_capacity => 1,
+      -parameters        => {
+        gff_dir     => $self->o('gff_dir'),
+        ftp_gff_dir     => $self->o('ftp_gff_dir'),
+        json_dir    => $self->o('json_dir'),
+        rest_server => $self->o('rest_server'),
+      },
+      -analysis_capacity => 5,
       -max_retry_count => 0,
       -flow_into  => {
         '2' => 'Create_GFF',
+        '3' => 'Create_Apollo_json',
       },
-      -rc_name    => 'bigmem',
+      -rc_name    => 'normal',
       -meadow_type       => 'LSF',
     },
 
@@ -303,10 +311,11 @@ sub pipeline_analyses {
       -module     => 'CreateGFF',
       -language   => 'python3',
       -parameters        => {
-        gff_dir     => $self->o('gff_dir'),
-        coverage    => $self->o('coverage'),
+        category    => '#category#',
+        coverage    => '#coverage#',
+        track_file  => '#track_file#',
       },
-      -hive_capacity => 10,
+      -hive_capacity => 20,
       -max_retry_count => 0,
       -rc_name    => 'bigmem',
       -meadow_type       => 'LSF',
@@ -321,15 +330,36 @@ sub pipeline_analyses {
       -module     => 'CreateGFF',
       -language   => 'python3',
       -parameters        => {
-        gff_dir     => $self->o('gff_dir'),
-        coverage    => $self->o('coverage'),
+        category    => '#category#',
+        coverage    => '#coverage#',
+        track_file  => '#track_file#',
       },
-      -hive_capacity => 10,
+      -hive_capacity => 20,
       -max_retry_count => 0,
       -rc_name    => 'biggermem',
       -meadow_type       => 'LSF',
       -flow_into  => {
         '2' => '?accu_name=gffs&accu_address={species}[]&accu_input_variable=gff',
+      }
+    },
+
+    {
+      -logic_name => 'Create_Apollo_json',
+      -module     => 'Apollo_track',
+      -language   => 'python3',
+      -parameters        => {
+        label        => '#label#',
+        description  => '#description#',
+        track_file  => '#track_file#',
+        json_file  => '#json_file#',
+        version  => '#version#',
+      },
+      -analysis_capacity => 1,
+      -max_retry_count => 0,
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
+      -flow_into  => {
+        #  '2' => '?accu_name=gffs&accu_address={species}[]&accu_input_variable=gff',
       }
     },
   ];
@@ -347,7 +377,7 @@ sub resource_classes {
     },
     'normal'            => {'LSF' => ['-q production-rh7 -M  1000 -R "rusage[mem=1000]"', $reg_requirement]},
     'bigmem'           => {'LSF' => ['-q production-rh7 -M  4000 -R "rusage[mem=4000]"', $reg_requirement]},
-    'biggermem'           => {'LSF' => ['-q production-rh7 -M  16000 -R "rusage[mem=16000]"', $reg_requirement]},
+    'biggermem'           => {'LSF' => ['-q production-rh7 -M  32000 -R "rusage[mem=32000]"', $reg_requirement]},
   }
 }
 

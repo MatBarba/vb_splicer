@@ -991,10 +991,28 @@ class SpliceDB():
                 chroms[chrom] += num
         return chroms
 
-    def query_count(self, sql):
+    def query_count(self, sql, values):
         conn = self.get_connection()
         c = conn.cursor()
-        c.execute(sql)
+        c.execute(sql, values)
 
         for row in c.fetchall():
             return row[0]
+
+    def count_tag(self, tag=[], antitag=[], coverage=1):
+        conds = []
+        values = []
+        if len(tag) > 0:
+            conds.append("tag=?")
+            values.append(tag)
+        if len(antitag) > 0:
+            conds.append("NOT tag=?")
+            values.append(antitag)
+        if coverage > 1:
+            conds.append("coverage >= ?")
+            values.append(coverage)
+        condition = " AND ".join(conds)
+
+        sql = "SELECT count(*) FROM splices WHERE " + condition
+        return self.query_count(sql, values)
+

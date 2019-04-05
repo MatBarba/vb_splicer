@@ -23,21 +23,13 @@ class CreateGFF(eHive.BaseRunnable):
         logging.basicConfig(level=logging.DEBUG)
 
         species = self.param_required('species')
-        gff_dir = self.param_required('gff_dir')
         splice_db = self.param_required('splice_db')
         gtf_file = self.param_required('gtf_file')
         category = self.param_required('category')
         coverage = self.param_required('coverage')
 
-        if not os.path.exists(gff_dir):
-            os.makedirs(gff_dir)
-
         # Create the db file name
-        gff_basename = os.path.join(gff_dir, species)
-        file_suffix = ""
-        if coverage > 1:
-            file_suffix = "_" + str(coverage)
-        filename = gff_basename + "_" + category + file_suffix + ".gff"
+        filename = self.param_required('track_file')
 
         # Run it!
         CreateGFF.create_gff(splice_db, filename, category, coverage)
