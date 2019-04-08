@@ -8,22 +8,22 @@ class Report(eHive.BaseRunnable):
         gffs = {}
 
         # Get the list of gffs created
-        if self.param_exists('gffs'):
-            gffs = self.param_required('gffs')
+        if self.param_exists('files'):
+            files = self.param_required('files')
         species = self.param_required('species')
 
-        report = self.create_report(species, gffs)
+        report = self.create_report(species, files)
         self.param('report_text', report)
 
-    def create_report(self, species, gffs):
+    def create_report(self, species, files):
         n_files = 0
         text_lines = []
 
-        if species in gffs:
-            gff_files = gffs[species]
-            n_files = len(gff_files)
-            for gff in gff_files:
-                text_lines.append("\t%s" % gff)
+        if species in files:
+            sp_files = files[species]
+            n_files = len(sp_files)
+            for file in sp_files:
+                text_lines.append("\t%s" % file)
 
         text_lines.insert(0, '%d GFF files for %s' % (n_files, species))
         return"\n".join(text_lines)

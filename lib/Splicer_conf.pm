@@ -126,7 +126,7 @@ sub pipeline_analyses {
         bam_dir => $self->o('bam_dir'),
       },
       -flow_into  => {
-        '2->A' => 'GTF_factory',
+        '2->A' => 'Files',
         'A->2' => 'Report',
       },
       -rc_name    => 'normal',
@@ -141,6 +141,30 @@ sub pipeline_analyses {
         '2' => '?accu_name=reports&accu_address={species}&accu_input_variable=report',
       },
       -analysis_capacity => 1,
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
+    },
+
+    {
+      -logic_name => 'Files',
+      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::Dummy',
+      -flow_into  => {
+        '1' => ['GTF_factory', 'BigWig_merge'],
+      },
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
+    },
+
+    {
+      -logic_name        => 'BigWig_merge',
+      #-module            => 'BigWigMerge',
+      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::Dummy',
+      #-language   => 'python3',
+      -parameters        => {
+        bigwig_dir => $self->o('bigwig_dir'),
+      },
+      -max_retry_count   => 0,
+      -failed_job_tolerance => 0,
       -rc_name    => 'normal',
       -meadow_type       => 'LSF',
     },
@@ -320,7 +344,7 @@ sub pipeline_analyses {
       -rc_name    => 'bigmem',
       -meadow_type       => 'LSF',
       -flow_into  => {
-        '2' => '?accu_name=gffs&accu_address={species}[]&accu_input_variable=gff',
+        '2' => '?accu_name=files&accu_address={species}[]&accu_input_variable=file',
         '-1' => 'Create_GFF_highmem',
       }
     },
@@ -339,7 +363,7 @@ sub pipeline_analyses {
       -rc_name    => 'biggermem',
       -meadow_type       => 'LSF',
       -flow_into  => {
-        '2' => '?accu_name=gffs&accu_address={species}[]&accu_input_variable=gff',
+        '2' => '?accu_name=files&accu_address={species}[]&accu_input_variable=file',
       }
     },
 

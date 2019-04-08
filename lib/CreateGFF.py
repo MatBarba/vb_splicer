@@ -36,7 +36,7 @@ class CreateGFF(eHive.BaseRunnable):
 
         self.dataflow({
             'species': species,
-            'gff': filename,
+            'file': filename,
             }, 2)
 
     def create_gff(input, filename, category, coverage=1):
