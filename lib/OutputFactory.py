@@ -14,30 +14,23 @@ class OutputFactory(eHive.BaseRunnable):
         logging.basicConfig(level=logging.INFO)
 
         species = self.param_required('species')
-        gff_dir = self.param_required('gff_dir')
+        summary_dir = self.param_required('summary_dir')
         json_dir = self.param_required('json_dir')
         splice_db = self.param_required('splice_db')
-        ftp_gff_dir = self.param_required('ftp_gff_dir')
+        ftp_summary_dir = self.param_required('ftp_summary_dir')
 
         min_splices = 10000
         max_splices = 500000
-
-        if not os.path.exists(gff_dir):
-            os.makedirs(gff_dir)
+        
+        species_dir = os.path.join(summary_dir, species)
+        if not os.path.exists(species_dir):
+            os.makedirs(species_dir)
         if not os.path.exists(json_dir):
             os.makedirs(json_dir)
 
         
         outputs = [
                 { "category": 'known', "coverages": [1] },
-#                { "category": 'unknown', "coverage": 1 },
-#                { "category": 'unknown', "coverage": 2 },
-#                { "category": 'unknown', "coverage": 5 },
-#                { "category": 'unknown', "coverage": 10 },
-#                { "category": 'unknown', "coverage": 100 },
-#                { "category": 'unknown', "coverage": 1000 },
-#                { "category": 'unknown', "coverage": 10000 },
-#                { "category": 'unknown', "coverage": 100000 },
                 { "category": 'unknown', "coverages": [100000, 10000, 1000, 100, 10, 5, 2, 1] },
                 { "category": 'duplicates', "coverages": [1] },
         ]
@@ -76,14 +69,14 @@ class OutputFactory(eHive.BaseRunnable):
                     logging.info("Too much splices to extract, end this category")
                     break
 
-                file_parts = [species, version, output['category']]
+                file_parts = [version, output['category']]
                 if cov > 1:
                     file_parts.append(str(cov))
                 file_name = "_".join(file_parts)
                 track_name = file_name + ".gff"
                 json_name = file_name + ".json"
-                track_file = os.path.join(gff_dir, track_name)
-                ftp_track_file = os.path.join(ftp_gff_dir, track_name)
+                track_file = os.path.join(summary_dir, species, track_name)
+                ftp_track_file = os.path.join(ftp_summary_dir, species, track_name)
                 json_file = os.path.join(json_dir, json_name)
 
                 label = self.make_label(version, output['category'], cov)

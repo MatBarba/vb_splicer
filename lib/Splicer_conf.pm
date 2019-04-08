@@ -291,8 +291,8 @@ sub pipeline_analyses {
       -module     => 'OutputFactory',
       -language   => 'python3',
       -parameters        => {
-        gff_dir     => $self->o('gff_dir'),
-        ftp_gff_dir     => $self->o('ftp_gff_dir'),
+        summary_dir     => $self->o('summary_dir'),
+        ftp_summary_dir     => $self->o('ftp_summary_dir'),
         json_dir    => $self->o('json_dir'),
         rest_server => $self->o('rest_server'),
       },
