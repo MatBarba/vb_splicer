@@ -17,6 +17,7 @@ sub pipeline_wide_parameters {
     return {
         %{$self->SUPER::pipeline_wide_parameters},
         'debug' => $self->o('debug'),
+        'tmp_dir' => $self->o('tmp_dir'),
     };
 }
 
@@ -147,22 +148,69 @@ sub pipeline_analyses {
 
     {
       -logic_name => 'Files',
-      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::Dummy',
+      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
+      -parameters        => {
+        tmp_dir => $self->o('tmp_dir'),
+        cmd => "mkdir -p #tmp_dir#",
+      },
       -flow_into  => {
-        '1' => ['GTF_factory', 'BigWig_merge'],
+        '1' => ['GTF_factory', 'Chrom_sizes'],
       },
       -rc_name    => 'normal',
       -meadow_type       => 'LSF',
     },
 
     {
-      -logic_name        => 'BigWig_merge',
-      #-module            => 'BigWigMerge',
+      -logic_name        => 'Chrom_sizes',
+      #-module            => 'ChromSizes',
       -module     => 'Bio::EnsEMBL::Hive::RunnableDB::Dummy',
       #-language   => 'python3',
       -parameters        => {
-        bigwig_dir => $self->o('bigwig_dir'),
+        tmp_dir => $self->o('tmp_dir'),
+        rest_server => $self->o('rest_server'),
+        sizes => "#tmp_dir#/#species#.sizes",
       },
+      -flow_into  => {
+        '1' => {'BigWig_merge' => { sizes => "#sizes#" } },
+      },
+      -analysis_capacity => 1,
+      -max_retry_count   => 0,
+      -failed_job_tolerance => 0,
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
+    },
+
+
+    {
+      -logic_name        => 'BigWig_merge',
+      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
+      -parameters        => {
+        bigwig_dir => $self->o('bigwig_dir'),
+        bigwig_list => "#bigwig_dir#/#species#/*",
+        output => "#tmp_dir#/#species#.bed",
+        cmd => "bigWigMerge #bigwig_list# #output#",
+      },
+      -flow_into  => {
+        '1' => {'Bed_to_BigWig' => { bed => "#output#", sizes => "#sizes#" } },
+      },
+      -analysis_capacity => 0,
+      -max_retry_count   => 0,
+      -failed_job_tolerance => 0,
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
+    },
+
+    {
+      -logic_name        => 'Bed_to_BigWig',
+      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
+      -parameters        => {
+        file => "#tmp_dir#/#species#.bed",
+        cmd => "bedGraphToBigWig #bed# #sizes# #file#",
+      },
+      -flow_into  => {
+        '1' => '?accu_name=files&accu_address={species}[]&accu_input_variable=file',
+      },
+      -analysis_capacity => 0,
       -max_retry_count   => 0,
       -failed_job_tolerance => 0,
       -rc_name    => 'normal',
@@ -178,6 +226,7 @@ sub pipeline_analyses {
         out_file_stem => 'gtf',
         force_gtf     => $self->o('force_gtf'),
       },
+      -analysis_capacity => 0,
       -max_retry_count   => 0,
       -failed_job_tolerance => 0,
       -flow_into  => {
