@@ -18,6 +18,10 @@ sub pipeline_wide_parameters {
         %{$self->SUPER::pipeline_wide_parameters},
         'debug' => $self->o('debug'),
         'tmp_dir' => $self->o('tmp_dir'),
+        'json_dir' => $self->o('json_dir'),
+        'summary_dir' => $self->o('summary_dir'),
+        'ftp_summary_dir' => $self->o('ftp_summary_dir'),
+        force_bigwig => $self->o('force_bigwig'),
     };
 }
 
@@ -29,6 +33,7 @@ sub default_options {
     pipeline_name => 'vb_splicer',
     email => $ENV{USER} . '@ebi.ac.uk',
 
+    force_bigwig => 0,
     do_donor_acceptor => 0,
     rest_server => undef,
     do_paralogs => 0,
@@ -71,7 +76,20 @@ sub pipeline_analyses {
       -input_ids  => [{}],
       -flow_into  => {
         '1->A' => 'Para_parser',
-        'A->1' => 'Email_report',
+        'A->1' => 'Cleanup',
+      },
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
+    },
+
+    {
+      -logic_name => 'Cleanup',
+      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
+      -parameters        => {
+        cmd => "rm -f #tmp_dir#/*; rmdir #tmp_dir#",
+      },
+      -flow_into  => {
+        '1' => 'Email_report',
       },
       -rc_name    => 'normal',
       -meadow_type       => 'LSF',
@@ -150,11 +168,14 @@ sub pipeline_analyses {
       -logic_name => 'Files',
       -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
       -parameters        => {
-        tmp_dir => $self->o('tmp_dir'),
-        cmd => "mkdir -p #tmp_dir#",
+        cmd => "mkdir -p #tmp_dir#; mkdir -p #summary_dir#/#species#; mkdir -p #json_dir#",
+        bw_file => "#summary_dir#/#species#/#species#.bw",
+        no_bigwig => '#expr( not -s #bw_file# )expr#',
+        do_bigwig => '#expr( #force_bigwig# or #no_bigwig# )expr#',
       },
       -flow_into  => {
-        '1' => ['GTF_factory', 'Chrom_sizes'],
+#        '1' => ['GTF_factory', {'Decide_bigwig' => { do_bigwig => '#do_bigwig#', no_bigwig => '#no_bigwig#', bw_file => '#bw_file#' } }],
+        '1' => ['GTF_factory', WHEN('#do_bigwig#', { 'Chrom_sizes' => INPUT_PLUS() })],
       },
       -rc_name    => 'normal',
       -meadow_type       => 'LSF',
@@ -162,41 +183,55 @@ sub pipeline_analyses {
 
     {
       -logic_name        => 'Chrom_sizes',
-      #-module            => 'ChromSizes',
-      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::Dummy',
-      #-language   => 'python3',
+      -module            => 'ChromSizes',
+      -language   => 'python3',
       -parameters        => {
         tmp_dir => $self->o('tmp_dir'),
         rest_server => $self->o('rest_server'),
-        sizes => "#tmp_dir#/#species#.sizes",
       },
       -flow_into  => {
-        '1' => {'BigWig_merge' => { sizes => "#sizes#" } },
+        '2' => { 'BigWig_merge' => INPUT_PLUS() },
       },
-      -analysis_capacity => 1,
+      -analysis_capacity => 5,
       -max_retry_count   => 0,
       -failed_job_tolerance => 0,
       -rc_name    => 'normal',
       -meadow_type       => 'LSF',
     },
 
-
     {
       -logic_name        => 'BigWig_merge',
       -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
       -parameters        => {
         bigwig_dir => $self->o('bigwig_dir'),
-        bigwig_list => "#bigwig_dir#/#species#/*",
-        output => "#tmp_dir#/#species#.bed",
-        cmd => "bigWigMerge #bigwig_list# #output#",
+        bigwig_list => "#bigwig_dir#/#species#/*.bw",
+        bed => "#tmp_dir#/#species#_unsorted.bed",
+        cmd => "bigWigMerge #bigwig_list# #bed#",
       },
       -flow_into  => {
-        '1' => {'Bed_to_BigWig' => { bed => "#output#", sizes => "#sizes#" } },
+        '1' => {'Sort_Bed' => { unsorted_bed => "#bed#" } },
       },
-      -analysis_capacity => 0,
+      -analysis_capacity => 20,
       -max_retry_count   => 0,
       -failed_job_tolerance => 0,
-      -rc_name    => 'normal',
+      -rc_name    => 'bigmem',
+      -meadow_type       => 'LSF',
+    },
+
+    {
+      -logic_name        => 'Sort_Bed',
+      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
+      -parameters        => {
+        bed => "#tmp_dir#/#species#.bed",
+        cmd => "bedSort #unsorted_bed# #bed#",
+      },
+      -flow_into  => {
+        '1' => {'Bed_to_BigWig' => { bed => "#bed#" } },
+      },
+      -analysis_capacity => 20,
+      -max_retry_count   => 0,
+      -failed_job_tolerance => 0,
+      -rc_name    => 'bigmem',
       -meadow_type       => 'LSF',
     },
 
@@ -204,15 +239,39 @@ sub pipeline_analyses {
       -logic_name        => 'Bed_to_BigWig',
       -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
       -parameters        => {
-        file => "#tmp_dir#/#species#.bed",
+        file => "#summary_dir#/#species#/#species#.bw",
         cmd => "bedGraphToBigWig #bed# #sizes# #file#",
       },
       -flow_into  => {
-        '1' => '?accu_name=files&accu_address={species}[]&accu_input_variable=file',
+        '1' => ['?accu_name=files&accu_address={species}[]&accu_input_variable=file', 'Format_bigwig_json'],
       },
-      -analysis_capacity => 0,
+      -analysis_capacity => 20,
       -max_retry_count   => 0,
       -failed_job_tolerance => 0,
+      -rc_name    => 'bigmem',
+      -meadow_type       => 'LSF',
+    },
+
+    {
+      -logic_name => 'Format_bigwig_json',
+      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::Dummy',
+      -parameters        => {
+        ftp_file => '#ftp_summary_dir#/#species#/#species#.bw',
+        json_file => '#json_dir#/#species#.bw.json',
+        species_name => '#expr( ucfirst(#species# =~ s/_/ /gr) )expr#',
+        description => 'Merged bigwig track for #species_name#',
+        label => '#version#_bw',
+        version => '#version#',
+      },
+      -flow_into  => {
+        '1' => { 'Create_Apollo_json' => {
+          description => '#description#',
+          label => '#label#',
+          track_file => '#ftp_file#',
+          json_file => '#json_file#',
+          version => '#version#'
+        } },
+      },
       -rc_name    => 'normal',
       -meadow_type       => 'LSF',
     },
@@ -431,9 +490,9 @@ sub pipeline_analyses {
       -max_retry_count => 0,
       -rc_name    => 'normal',
       -meadow_type       => 'LSF',
-      -flow_into  => {
+      #-flow_into  => {
         #  '2' => '?accu_name=gffs&accu_address={species}[]&accu_input_variable=gff',
-      }
+        #}
     },
   ];
 }
