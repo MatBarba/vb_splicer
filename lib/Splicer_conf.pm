@@ -19,6 +19,7 @@ sub pipeline_wide_parameters {
         'debug' => $self->o('debug'),
         'tmp_dir' => $self->o('tmp_dir'),
         'json_dir' => $self->o('json_dir'),
+        'bigwig_dir' => $self->o('bigwig_dir'),
         'summary_dir' => $self->o('summary_dir'),
         'ftp_summary_dir' => $self->o('ftp_summary_dir'),
         force_bigwig => $self->o('force_bigwig'),
@@ -169,30 +170,47 @@ sub pipeline_analyses {
       -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
       -parameters        => {
         cmd => "mkdir -p #tmp_dir#; mkdir -p #summary_dir#/#species#; mkdir -p #json_dir#",
-        bw_file => "#summary_dir#/#species#/#species#.bw",
-        no_bigwig => '#expr( not -s #bw_file# )expr#',
-        do_bigwig => '#expr( #force_bigwig# or #no_bigwig# )expr#',
       },
       -flow_into  => {
-#        '1' => ['GTF_factory', {'Decide_bigwig' => { do_bigwig => '#do_bigwig#', no_bigwig => '#no_bigwig#', bw_file => '#bw_file#' } }],
-        '1' => ['GTF_factory', WHEN('#do_bigwig#', { 'Chrom_sizes' => INPUT_PLUS() })],
+        '1' => ['GTF_factory', 'Prepare_bigwig'],
       },
       -rc_name    => 'normal',
       -meadow_type       => 'LSF',
     },
 
     {
-      -logic_name        => 'Chrom_sizes',
-      -module            => 'ChromSizes',
+      -logic_name        => 'Prepare_bigwig',
+      -module            => 'PrepareBigWig',
       -language   => 'python3',
       -parameters        => {
         tmp_dir => $self->o('tmp_dir'),
+        json_dir => $self->o('json_dir'),
+        bigwig_dir => $self->o('bigwig_dir'),
+        summary_dir => $self->o('summary_dir'),
+        ftp_summary_dir => $self->o('ftp_summary_dir'),
         rest_server => $self->o('rest_server'),
+        force_bigwig => $self->o('force_bigwig'),
       },
       -flow_into  => {
-        '2' => { 'BigWig_merge' => INPUT_PLUS() },
+        '2' => 'Copy_bigwig',
+        '3' => 'BigWig_merge',
+        '4' => ['Create_Apollo_json', '?accu_name=files&accu_address={species}[]&accu_input_variable=file' ],
       },
       -analysis_capacity => 5,
+      -max_retry_count   => 0,
+      -failed_job_tolerance => 0,
+      -rc_name    => 'normal',
+      -meadow_type       => 'LSF',
+    },
+
+    {
+      -logic_name        => 'Copy_bigwig',
+      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
+      -parameters        => {
+        bigwig_list => "#bigwig_dir#/#species#/*.bw",
+        cmd => "cp #bigwig_list# #file#",
+      },
+      -analysis_capacity => 1,
       -max_retry_count   => 0,
       -failed_job_tolerance => 0,
       -rc_name    => 'normal',
@@ -203,7 +221,6 @@ sub pipeline_analyses {
       -logic_name        => 'BigWig_merge',
       -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
       -parameters        => {
-        bigwig_dir => $self->o('bigwig_dir'),
         bigwig_list => "#bigwig_dir#/#species#/*.bw",
         bed => "#tmp_dir#/#species#_unsorted.bed",
         cmd => "bigWigMerge #bigwig_list# #bed#",
@@ -211,7 +228,7 @@ sub pipeline_analyses {
       -flow_into  => {
         '1' => {'Sort_Bed' => { unsorted_bed => "#bed#" } },
       },
-      -analysis_capacity => 20,
+      -analysis_capacity => 10,
       -max_retry_count   => 0,
       -failed_job_tolerance => 0,
       -rc_name    => 'bigmem',
@@ -228,7 +245,7 @@ sub pipeline_analyses {
       -flow_into  => {
         '1' => {'Bed_to_BigWig' => { bed => "#bed#" } },
       },
-      -analysis_capacity => 20,
+      -analysis_capacity => 10,
       -max_retry_count   => 0,
       -failed_job_tolerance => 0,
       -rc_name    => 'bigmem',
@@ -239,40 +256,12 @@ sub pipeline_analyses {
       -logic_name        => 'Bed_to_BigWig',
       -module     => 'Bio::EnsEMBL::Hive::RunnableDB::SystemCmd',
       -parameters        => {
-        file => "#summary_dir#/#species#/#species#.bw",
         cmd => "bedGraphToBigWig #bed# #sizes# #file#",
       },
-      -flow_into  => {
-        '1' => ['?accu_name=files&accu_address={species}[]&accu_input_variable=file', 'Format_bigwig_json'],
-      },
-      -analysis_capacity => 20,
+      -analysis_capacity => 10,
       -max_retry_count   => 0,
       -failed_job_tolerance => 0,
       -rc_name    => 'bigmem',
-      -meadow_type       => 'LSF',
-    },
-
-    {
-      -logic_name => 'Format_bigwig_json',
-      -module     => 'Bio::EnsEMBL::Hive::RunnableDB::Dummy',
-      -parameters        => {
-        ftp_file => '#ftp_summary_dir#/#species#/#species#.bw',
-        json_file => '#json_dir#/#species#.bw.json',
-        species_name => '#expr( ucfirst(#species# =~ s/_/ /gr) )expr#',
-        description => 'Merged bigwig track for #species_name#',
-        label => '#version#_bw',
-        version => '#version#',
-      },
-      -flow_into  => {
-        '1' => { 'Create_Apollo_json' => {
-          description => '#description#',
-          label => '#label#',
-          track_file => '#ftp_file#',
-          json_file => '#json_file#',
-          version => '#version#'
-        } },
-      },
-      -rc_name    => 'normal',
       -meadow_type       => 'LSF',
     },
 
@@ -285,7 +274,7 @@ sub pipeline_analyses {
         out_file_stem => 'gtf',
         force_gtf     => $self->o('force_gtf'),
       },
-      -analysis_capacity => 0,
+      -analysis_capacity => 1,
       -max_retry_count   => 0,
       -failed_job_tolerance => 0,
       -flow_into  => {

@@ -27,8 +27,10 @@ class Apollo_track(eHive.BaseRunnable):
 
         caption = label
         category = "Summary track"
-        source_type = 'gff'
         source_url = infile
+        source_type = 'gff'
+        if ".bw" in source_url:
+            source_type = 'bigwig'
 
         data = {
                 'label': label,
