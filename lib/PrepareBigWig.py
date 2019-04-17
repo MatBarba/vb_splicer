@@ -27,14 +27,11 @@ class PrepareBigWig(eHive.BaseRunnable):
         json_dir = self.param('json_dir')
         force_bigwig = self.param('force_bigwig')
 
+        # Get sizes and version
         size_file = os.path.join(tmp_dir, species + ".sizes")
 
         # Get the size file for the bed -> bigwig conversion
         sizes, version = self.get_sizes(rest_server, species)
-
-        # If only one bigwig file, only copy
-        sp_bigwig_dir = os.path.join(bigwig_dir, species)
-        bigwigs = [name for name in os.listdir(sp_bigwig_dir) if ".bw" in name]
 
         # Check if the final bigwig already exists
         do_bigwig = 1
@@ -42,17 +39,21 @@ class PrepareBigWig(eHive.BaseRunnable):
         if os.path.isfile(final_bw) and not force_bigwig:
             do_bigwig = 0
         
-        one_bigwig = 0
         if do_bigwig:
+
+            # If only one bigwig file, only copy
+            sp_bigwig_dir = os.path.join(bigwig_dir, species)
+            bigwigs = [name for name in os.listdir(sp_bigwig_dir) if ".bw" in name]
+
+            one_bigwig = 0
             if len(bigwigs) == 1:
                 one_bigwig = 1
             else:
                 # Print to file if it doesn't exist already
                 if not os.path.isfile(size_file):
                     self.print_sizes(sizes, size_file)
-        
-        # Flow
-        if do_bigwig:
+            
+            # Flow
             if one_bigwig:
                 self.dataflow({
                     'version': version,
