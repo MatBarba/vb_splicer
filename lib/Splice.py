@@ -991,7 +991,7 @@ class SpliceDB():
                 chroms[chrom] += num
         return chroms
 
-    def query_count(self, sql, values):
+    def query_count(self, sql, values=[]):
         conn = self.get_connection()
         c = conn.cursor()
         c.execute(sql, values)
