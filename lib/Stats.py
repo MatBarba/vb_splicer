@@ -10,20 +10,29 @@ from glob import glob
 import os.path
 
 class Stats(eHive.BaseRunnable):
+
     queries = [
             ['genes', "SELECT count(*) FROM genes"],
             ['genes_without_intron', "SELECT count(*) FROM genes WHERE introns=0"],
             ['genes_completely_covered', "SELECT count(*) FROM genes WHERE introns=covered_introns AND introns > 0"],
-#            ['genes_completely_covered_10', "SELECT count(*) FROM genes WHERE introns=covered_introns AND introns > 0 AND splice_coverage >= 10"],
+    #            ['genes_completely_covered_10', "SELECT count(*) FROM genes WHERE introns=covered_introns AND introns > 0 AND splice_coverage >= 10"],
             ['genes_partially_covered', "SELECT count(*) FROM genes WHERE covered_introns > 0 AND covered_introns < introns AND introns > 0"],
             ['genes_not_covered', "SELECT count(*) FROM genes WHERE covered_introns = 0 AND introns > 0"],
             ['introns', "SELECT sum(introns) FROM genes"],
             ['known_introns', "SELECT SUM(covered_introns) FROM genes"],
-            ['known_introns_%', "SELECT SUM(covered_introns)*1.0/sum(introns) FROM genes"],
-            ['known_introns_coverage', "SELECT sum(splice_coverage)*1.0/sum(covered_introns) FROM genes"],
-#            ['splices', "SELECT count(*) FROM splices"],
-#            ['genes_with_weak_splices', "SELECT count(*) FROM genes g LEFT JOIN splices s USING(gene) WHERE s.coverage < g.splice_coverage/100 AND s.coverage < 10"],
+            ['known_introns_%genes', "SELECT SUM(covered_introns)*1.0/sum(introns) FROM genes"],
+            ['known_introns_genes_coverage', "SELECT sum(splice_coverage)*1.0/sum(covered_introns) FROM genes"],
+    #            ['splices', "SELECT count(*) FROM splices"],
+    #            ['genes_with_weak_splices', "SELECT count(*) FROM genes g LEFT JOIN splices s USING(gene) WHERE s.coverage < g.splice_coverage/100 AND s.coverage < 10"],
             ]
+        
+    # Do the same using transcripts instead of genes
+    duplicated_queries = []
+    for q in queries:
+        if 'gene' in q[0] or 'gene' in q[1]:
+            newq = [q[0].replace('gene', 'transcript'), q[1].replace('gene', 'transcript')]
+            duplicated_queries.append(newq)
+    queries += duplicated_queries
 
     def run(self):
         logging.basicConfig(level=logging.INFO)
