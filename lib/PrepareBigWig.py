@@ -85,7 +85,7 @@ class PrepareBigWig(eHive.BaseRunnable):
         }, 4)
 
     def get_sizes(self, rest_server, species):
-        ext = "/info/assembly/%s?" % (species)
+        ext = "/info/assembly/%s?synonyms=1" % (species)
         logging.info(rest_server + ext)
         r = requests.get(rest_server + ext, headers={ "Content-Type" : "application/json"})
         
@@ -97,6 +97,8 @@ class PrepareBigWig(eHive.BaseRunnable):
         sizes = []
         for seq in json_data['top_level_region']:
             sizes.append([seq["name"], str(seq["length"])])
+            for syn in seq["synonyms"]:
+                sizes.append([syn["name"], str(seq["length"])])
         logging.info("Got %d seq_regions", len(sizes))
 
         version = json_data['assembly_name']
